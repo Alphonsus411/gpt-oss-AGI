@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Enrutador central para delegar solicitudes entre módulos."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
@@ -50,14 +50,25 @@ class MetaRouter:
         )
 
     def select_expert(
-        self, task: str, context: str, goals: List[str]
+        self,
+        task: str,
+        context: str,
+        goals: List[str],
+        *,
+        weight_task: int = 1,
+        weight_context: int = 1,
+        weight_goal: int = 1,
     ) -> Dict[str, int]:
         """Calcula un puntaje para cada experto registrado.
 
-        La heurística otorga puntos por coincidencia exacta entre la solicitud y
-        los metadatos de cada experto. Cada tarea o contexto coincidente suma un
-        punto y cada meta coincidente suma otro. Además se añade la ``priority``
-        declarada por el experto.
+        Parameters
+        ----------
+        task, context, goals:
+            Elementos de la solicitud que se comparan con los metadatos
+            proporcionados por cada experto.
+        weight_task, weight_context, weight_goal:
+            Pesos que multiplica cada coincidencia de ``task``, ``context`` y
+            ``goals`` respectivamente.
         """
 
         scores: Dict[str, int] = {}
@@ -65,14 +76,21 @@ class MetaRouter:
         for name, expert in self._experts.items():
             score = expert.priority
             if task in expert.tasks:
-                score += 1
+                score += weight_task
             if context in expert.contexts:
-                score += 1
-            score += len(goals_set.intersection(expert.goals))
+                score += weight_context
+            score += weight_goal * len(goals_set.intersection(expert.goals))
             scores[name] = score
         return scores
 
-    def route(self, request: Dict[str, Any]) -> Any:
+    def route(
+        self,
+        request: Dict[str, Any],
+        *,
+        weight_task: int = 1,
+        weight_context: int = 1,
+        weight_goal: int = 1,
+    ) -> Any:
         """Envía ``request`` al experto más adecuado.
 
         Parameters
@@ -81,6 +99,9 @@ class MetaRouter:
             Diccionario que debe contener las claves ``"task"``, ``"context"``
             y ``"goals"`` (lista de metas). Otros campos se pasan directamente
             al experto seleccionado.
+        weight_task, weight_context, weight_goal:
+            Pesos que controlan la importancia relativa de cada tipo de
+            coincidencia en la heurística de selección.
         """
 
         task = request.get("task")
@@ -88,10 +109,17 @@ class MetaRouter:
         goals = request.get("goals")
         if task is None or context is None or goals is None:
             raise ValueError(
-                "La solicitud debe incluir 'task', 'context' y 'goals'"
+                "La solicitud debe incluir 'task', 'context' y 'goals'",
             )
 
-        scores = self.select_expert(task, context, goals)
+        scores = self.select_expert(
+            task,
+            context,
+            goals,
+            weight_task=weight_task,
+            weight_context=weight_context,
+            weight_goal=weight_goal,
+        )
         if not scores:
             raise ValueError("No hay expertos registrados")
 

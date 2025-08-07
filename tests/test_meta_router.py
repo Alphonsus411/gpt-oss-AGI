@@ -79,6 +79,19 @@ def test_selects_correct_expert_among_multiple():
     assert third.received is None
 
 
+def test_heuristic_weights_affect_selection():
+    router = MetaRouter()
+    task_expert = DummyModule()
+    ctx_expert = DummyModule()
+    router.register("task", task_expert, tasks=["t"], contexts=[], goals=[])
+    router.register("ctx", ctx_expert, tasks=[], contexts=["c"], goals=[])
+    request = {"task": "t", "context": "c", "goals": []}
+    result = router.route(request, weight_task=1, weight_context=2)
+    assert result == "ok"
+    assert ctx_expert.received is not None
+    assert task_expert.received is None
+
+
 def test_no_expert_matches_raises_error():
     router = MetaRouter()
     dummy = DummyModule()
