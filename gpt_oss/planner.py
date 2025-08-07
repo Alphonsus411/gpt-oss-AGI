@@ -88,6 +88,23 @@ class Planner:
         _, goal = heapq.heappop(self.goals)
         return goal
 
+    def list_goals(self) -> List[str]:
+        """Devuelve las metas ordenadas por prioridad sin modificarlas.
+
+        Returns
+        -------
+        List[str]
+            Lista de metas pendientes de alcanzar, ordenadas de la más a la
+            menos prioritaria.
+        """
+
+        return [goal for _, goal in sorted(self.goals)]
+
+    def get_intention(self) -> Optional[str]:
+        """Recupera la intención global actualmente definida."""
+
+        return self.global_intent
+
     # --- Gestión de modos -------------------------------------------------
     def activate_mode(self, tipo: str) -> None:
         """Activa un modo de operación y configura sus parámetros.
@@ -120,3 +137,15 @@ class Planner:
         """Devuelve el modo actualmente activo, o ``None`` si no hay modo."""
 
         return self.mode
+
+    def get_mode_parameters(self) -> Dict[str, Any]:
+        """Obtiene los parámetros asociados al modo activo.
+
+        Returns
+        -------
+        Dict[str, Any]
+            Diccionario con los parámetros del modo actual (vacío si no hay
+            modo activo).
+        """
+
+        return self.mode_parameters
