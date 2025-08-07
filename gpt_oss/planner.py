@@ -9,7 +9,7 @@ compartiendo esta información con componentes como ``ReasoningKernel``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import heapq
 
@@ -24,13 +24,16 @@ class Planner:
         Intención general u objetivo principal del agente.
     goals:
         Lista de metas específicas que se deben alcanzar.
-    active_mode:
-        Indica si el planificador está actualmente en modo activo.
+    mode:
+        Modo operativo actualmente activo (`creative`, `analytic` o `deductive`).
+    mode_parameters:
+        Conjunto de parámetros asociados al modo activo (temperatura, heurísticas, etc.).
     """
 
     global_intent: Optional[str] = None
     goals: List[Tuple[int, str]] = field(default_factory=list)
-    active_mode: bool = False
+    mode: Optional[str] = None
+    mode_parameters: Dict[str, Any] = field(default_factory=dict)
 
     def set_intention(self, intent: str) -> None:
         """Define la intención global del agente.
@@ -84,3 +87,36 @@ class Planner:
             return None
         _, goal = heapq.heappop(self.goals)
         return goal
+
+    # --- Gestión de modos -------------------------------------------------
+    def activate_mode(self, tipo: str) -> None:
+        """Activa un modo de operación y configura sus parámetros.
+
+        Parameters
+        ----------
+        tipo:
+            Cadena que identifica el modo a activar. Los valores aceptados son
+            ``"creative"``, ``"analytic"`` y ``"deductive"``.
+
+        Raises
+        ------
+        ValueError
+            Si el modo solicitado no está soportado.
+        """
+
+        estrategias = {
+            "creative": {"temperature": 1.0, "heuristic": "divergent"},
+            "analytic": {"temperature": 0.5, "heuristic": "critical"},
+            "deductive": {"temperature": 0.2, "heuristic": "logical"},
+        }
+
+        if tipo not in estrategias:
+            raise ValueError(f"Modo no soportado: {tipo}")
+
+        self.mode = tipo
+        self.mode_parameters = estrategias[tipo]
+
+    def current_mode(self) -> Optional[str]:
+        """Devuelve el modo actualmente activo, o ``None`` si no hay modo."""
+
+        return self.mode
