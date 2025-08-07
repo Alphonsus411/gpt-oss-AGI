@@ -1,5 +1,7 @@
 """
-Harmony chat with tools
+Harmony chat with tools.
+
+Incluye integración con :class:`Planner` para consultar metas y modos del agente.
 """
 
 import atexit
@@ -21,6 +23,7 @@ from gpt_oss.tools import apply_patch
 from gpt_oss.tools.simple_browser import SimpleBrowserTool
 from gpt_oss.tools.simple_browser.backend import ExaBackend
 from gpt_oss.tools.python_docker.docker_tool import PythonTool
+from gpt_oss.planner import Planner  # Gestiona metas y modos del agente
 
 from openai_harmony import (
     Author,
@@ -59,6 +62,8 @@ def get_user_input():
 
 
 def main(args):
+    planner = Planner()  # Punto de integración para metas y modo
+
     match args.backend:
         case "triton":
             from gpt_oss.triton.model import TokenGenerator as TritonGenerator

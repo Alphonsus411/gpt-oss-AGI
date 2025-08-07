@@ -2,13 +2,18 @@
 # Note: This script is for demonstration purposes only. It is not designed for production use.
 #       See gpt_oss.chat for a more complete example with the Harmony parser.
 # torchrun --nproc-per-node=4 -m gpt_oss.generate -p "why did the chicken cross the road?" model/
+#
+# Incluye un ``Planner`` que permite consultar metas y modos del agente.
 
 import argparse
 
+from gpt_oss.planner import Planner  # Gestiona metas y modos del agente
 from gpt_oss.tokenizer import get_tokenizer
 
 
 def main(args):
+    planner = Planner()  # Punto de integración para metas y modo
+
     match args.backend:
         case "torch":
             from gpt_oss.torch.utils import init_distributed
