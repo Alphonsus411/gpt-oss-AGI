@@ -1,0 +1,5 @@
+{
+  "name": "AGICore Agent",
+  "version": "1.0",
+  "capabilities": ["planning", "reasoning", "orchestration"]
+}

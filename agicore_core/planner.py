@@ -10,6 +10,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import json
+from pathlib import Path
+
 from agix.orchestrator import VirtualQualia
 
 
@@ -26,6 +29,13 @@ class Planner:
 
     def __init__(self, orchestrator: Optional[VirtualQualia] = None) -> None:
         self.orchestrator = orchestrator or VirtualQualia()
+
+        config_path = Path(__file__).resolve().parent / "config" / "agent_profile.json"
+        try:
+            with config_path.open("r", encoding="utf-8") as f:
+                self.agent_profile = json.load(f)
+        except FileNotFoundError:
+            self.agent_profile = {}
 
     def plan(self, state: Dict[str, Any]) -> List[Any]:
         """Genera un plan basado en el ``state`` dado.
