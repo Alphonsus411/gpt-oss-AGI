@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from meta_router import MetaRouter
 
@@ -16,6 +16,7 @@ class ReasoningKernel:
         self.planner = planner
         self.router = router
         self._state: Dict[str, Any] = {}
+        self.history: List[Dict[str, Any]] = []
 
     def set_state(self, state: Dict[str, Any]) -> None:
         """Establece el ``state`` inicial para el planificador."""
@@ -65,3 +66,48 @@ class ReasoningKernel:
         else:
             self._state["result"] = result
         return result
+
+    def run(self, max_iterations: int = 10) -> Dict[str, Any]:
+        """Genera planes y ejecuta pasos hasta cumplir las metas.
+
+        En cada iteración se obtiene un plan del :class:`Planner` utilizando el
+        estado actual. Los pasos del plan se ejecutan mediante
+        :meth:`evaluate_step` y se registran en ``history`` junto con el
+        resultado o el error producido. El bucle finaliza si todas las metas
+        están satisfechas o si se alcanza ``max_iterations``.
+
+        Parameters
+        ----------
+        max_iterations:
+            Número máximo de iteraciones del ciclo de planificación y
+            ejecución.
+
+        Returns
+        -------
+        dict
+            El estado interno tras finalizar la ejecución.
+        """
+
+        if self.planner is None:
+            raise ValueError("Se requiere un Planner para ejecutar 'run'")
+
+        for iteration in range(max_iterations):
+            try:
+                plan = self.planner.plan(self._state)
+            except Exception as exc:  # pragma: no cover - planificación fallida
+                self.history.append({"iteration": iteration, "error": str(exc)})
+                break
+
+            for step in plan:
+                try:
+                    result = self.evaluate_step(step)
+                    self.history.append({"step": step, "result": result})
+                except Exception as exc:  # pragma: no cover - error del experto
+                    self.history.append({"step": step, "error": str(exc)})
+                    return self._state
+
+                goals = self._state.get("goals", [])
+                if isinstance(goals, list) and all(self._state.get(g) for g in goals):
+                    return self._state
+
+        return self._state
