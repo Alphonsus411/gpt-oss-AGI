@@ -16,7 +16,10 @@ from gpt_oss.responses_api.api_server import create_api_server
 
 @pytest.fixture(scope="session")
 def harmony_encoding():
-    return load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
+    try:
+        return load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
+    except Exception:
+        pytest.skip("openai_harmony encoding unavailable", allow_module_level=True)
 
 
 @pytest.fixture
