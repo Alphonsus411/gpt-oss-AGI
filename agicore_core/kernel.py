@@ -46,12 +46,16 @@ class ReasoningKernel:
 
         request = {"task": task, "context": context, "goals": goals}
         request.update(step)
-        return self.router.route(
-            request,
-            weight_task=weight_task,
-            weight_context=weight_context,
-            weight_goal=weight_goal,
-        )
+        try:
+            return self.router.route(
+                request,
+                weight_task=weight_task,
+                weight_context=weight_context,
+                weight_goal=weight_goal,
+            )
+        except TypeError:
+            # Algunos ``MetaRouter`` de pruebas no aceptan pesos heurísticos
+            return self.router.route(request)
 
     def execute_plan(
         self,

@@ -23,8 +23,14 @@ class RecordingExpert:
     def handle(self, request):
         self.calls.append(request)
         if request["task"] == "inc":
-            return {"count": request["count"] + request["payload"]}
-        return {"count": request["count"] - request["payload"]}
+            count = request["count"] + request["payload"]
+        else:
+            count = request["count"] - request["payload"]
+        result = {"count": count}
+        target = request.get("target", float("inf"))
+        if count >= target:
+            result["done"] = True
+        return result
 
 
 def make_kernel():
@@ -63,3 +69,35 @@ def test_evaluate_step_else_branch():
     assert result == {"count": -3}
     assert kernel.get_state()["count"] == -3
     assert dec.calls[0]["payload"] == 3
+
+
+class DummyPlanner:
+    def __init__(self):
+        self.calls = 0
+
+    def plan(self, state):
+        self.calls += 1
+        return [{"task": "inc", "payload": 1}]
+
+
+def test_run_stops_when_goal_reached():
+    kernel, inc, _ = make_kernel()
+    planner = DummyPlanner()
+    kernel.planner = planner
+    kernel.set_state({"context": "ctx", "goals": ["done"], "count": 0, "target": 2})
+    final_state = kernel.run(max_iterations=5)
+    assert final_state["count"] == 2
+    assert final_state["done"] is True
+    assert planner.calls == 2
+    assert len(kernel.history) == 2
+
+
+def test_run_respects_iteration_limit():
+    kernel, inc, _ = make_kernel()
+    planner = DummyPlanner()
+    kernel.planner = planner
+    kernel.set_state({"context": "ctx", "goals": ["done"], "count": 0, "target": 10})
+    kernel.run(max_iterations=3)
+    assert kernel.get_state()["count"] == 3
+    assert "done" not in kernel.get_state()
+    assert planner.calls == 3
