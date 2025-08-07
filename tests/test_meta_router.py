@@ -38,3 +38,57 @@ def test_unknown_task_raises_error():
     router = MetaRouter()
     with pytest.raises(ValueError):
         router.route({"task": "missing", "context": "", "goals": []})
+
+
+def test_selects_correct_expert_among_multiple():
+    router = MetaRouter()
+    first = DummyModule()
+    second = DummyModule()
+    third = DummyModule()
+    router.register(
+        "first",
+        first,
+        tasks=["task1"],
+        contexts=["ctx1"],
+        goals=["goal1"],
+    )
+    router.register(
+        "second",
+        second,
+        tasks=["task1"],
+        contexts=["ctx2"],
+        goals=["goal1"],
+    )
+    router.register(
+        "third",
+        third,
+        tasks=["task2"],
+        contexts=["ctx1"],
+        goals=["goal2"],
+    )
+    request = {
+        "task": "task1",
+        "context": "ctx2",
+        "goals": ["goal1"],
+        "payload": 999,
+    }
+    result = router.route(request)
+    assert result == "ok"
+    assert second.received["payload"] == 999
+    assert first.received is None
+    assert third.received is None
+
+
+def test_no_expert_matches_raises_error():
+    router = MetaRouter()
+    dummy = DummyModule()
+    router.register(
+        "dummy",
+        dummy,
+        tasks=["t"],
+        contexts=["c"],
+        goals=["g"],
+    )
+    with pytest.raises(ValueError) as exc:
+        router.route({"task": "other", "context": "x", "goals": ["z"]})
+    assert "Ningún experto" in str(exc.value)
