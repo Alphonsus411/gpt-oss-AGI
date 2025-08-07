@@ -24,6 +24,9 @@ class ReasoningKernel:
         task: str,
         context: str,
         goals: List[str],
+        weight_task: int = 1,
+        weight_context: int = 1,
+        weight_goal: int = 1,
     ) -> Any:
         """Envía ``step`` al experto adecuado mediante ``router``.
 
@@ -36,11 +39,19 @@ class ReasoningKernel:
         task, context, goals:
             Metadatos utilizados por :class:`MetaRouter` para seleccionar el
             experto más adecuado.
+        weight_task, weight_context, weight_goal:
+            Pesos que se pasan a :meth:`meta_router.MetaRouter.route` para
+            ajustar la heurística de selección.
         """
 
         request = {"task": task, "context": context, "goals": goals}
         request.update(step)
-        return self.router.route(request)
+        return self.router.route(
+            request,
+            weight_task=weight_task,
+            weight_context=weight_context,
+            weight_goal=weight_goal,
+        )
 
     def execute_plan(
         self,
@@ -49,10 +60,21 @@ class ReasoningKernel:
         task: str,
         context: str,
         goals: List[str],
+        weight_task: int = 1,
+        weight_context: int = 1,
+        weight_goal: int = 1,
     ) -> List[Any]:
         """Ejecuta secuencialmente todos los pasos del plan."""
 
         return [
-            self.execute_step(step, task=task, context=context, goals=goals)
+            self.execute_step(
+                step,
+                task=task,
+                context=context,
+                goals=goals,
+                weight_task=weight_task,
+                weight_context=weight_context,
+                weight_goal=weight_goal,
+            )
             for step in plan
         ]
