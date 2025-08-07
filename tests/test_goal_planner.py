@@ -24,3 +24,16 @@ def test_add_goal_negative_priority():
     planner = Planner()
     with pytest.raises(ValueError):
         planner.add_goal("invalida", -1)
+
+
+def test_activate_mode_and_current_mode():
+    planner = Planner()
+    planner.activate_mode("creative")
+    assert planner.current_mode() == "creative"
+    assert planner.mode_parameters["temperature"] == 1.0
+
+
+def test_activate_mode_invalid():
+    planner = Planner()
+    with pytest.raises(ValueError):
+        planner.activate_mode("unknown")
