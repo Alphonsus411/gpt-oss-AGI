@@ -1,16 +1,9 @@
 from __future__ import annotations
 
-"""Enrutador central para delegar solicitudes entre módulos.
-
-La clase :class:`MetaRouter` mantiene un registro de módulos y dirige cada
-solicitud al destino adecuado. Por defecto se registra el
-:class:`agicore_core.ReasoningKernel` bajo la clave ``"reasoning"``.
-"""
+"""Enrutador central para delegar solicitudes entre módulos."""
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
-
-from agicore_core import ReasoningKernel
 
 
 @dataclass
@@ -24,22 +17,6 @@ class Expert:
     priority: int = 0
 
 
-class ReasoningExpert:
-    """Pequeño adaptador para :class:`ReasoningKernel`.
-
-    Provee un método :meth:`handle` que delega en
-    :meth:`ReasoningKernel.execute_plan` para mantener una interfaz común
-    entre todos los expertos registrados.
-    """
-
-    def __init__(self, kernel: ReasoningKernel) -> None:
-        self._kernel = kernel
-
-    def handle(self, request: Dict[str, Any]) -> Any:  # pragma: no cover - delega
-        plan = request.get("plan", [])
-        return self._kernel.execute_plan(plan)
-
-
 class MetaRouter:
     """Enrutador de solicitudes basado en expertos.
 
@@ -51,12 +28,6 @@ class MetaRouter:
 
     def __init__(self) -> None:
         self._experts: Dict[str, Expert] = {}
-        # Registro por defecto del kernel de razonamiento con un adaptador.
-        self.register(
-            "reasoning",
-            ReasoningExpert(ReasoningKernel()),
-            tasks=["reasoning"],
-        )
 
     def register(
         self,

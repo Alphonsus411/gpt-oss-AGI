@@ -1,15 +1,14 @@
 # Flujo de enrutamiento
 
 El archivo `meta_router.py` introduce la clase `MetaRouter`, un punto central
-para enviar solicitudes a distintos módulos.
+para enviar solicitudes a distintos módulos basándose en metadatos declarados.
 
-1. El cliente construye un diccionario con la clave `module` que identifica el
-   destino.
-2. `MetaRouter` busca el módulo en su registro interno.
-3. Si el módulo es `reasoning`, se invoca a `ReasoningKernel.execute_plan` con
-   el plan provisto en `plan`.
-4. Para cualquier otro módulo registrado se llama a su método `handle` y se
-   le entrega el diccionario original.
+1. El cliente construye un diccionario con las claves `task`, `context` y
+   `goals` (lista de metas) describiendo su petición.
+2. `MetaRouter` calcula una puntuación para cada experto registrado según las
+   coincidencias con esos metadatos.
+3. El experto con mayor puntuación recibe la solicitud completa mediante su
+   método `handle`.
 
-Este diseño permite ampliar el sistema registrando nuevos módulos sin modificar
-el núcleo del enrutador.
+Este diseño permite ampliar el sistema registrando nuevos expertos sin
+modificar el núcleo del enrutador.
