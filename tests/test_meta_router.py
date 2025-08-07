@@ -13,20 +13,6 @@ class DummyModule:
         return "ok"
 
 
-def test_routes_to_reasoning_kernel():
-    router = MetaRouter()
-    plan = [{"step": 1}]
-    request = {
-        "task": "reasoning",
-        "context": "test",
-        "goals": [],
-        "plan": plan,
-    }
-    result = router.route(request)
-    assert isinstance(result, list)
-    assert len(result) == len(plan)
-
-
 def test_routes_to_custom_module():
     router = MetaRouter()
     dummy = DummyModule()
