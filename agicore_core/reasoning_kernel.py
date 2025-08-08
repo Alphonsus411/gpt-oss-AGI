@@ -7,14 +7,21 @@ from typing import Any, Dict, List
 from meta_router import MetaRouter
 
 from .planner import Planner
+from .meta_evaluator import MetaEvaluator
 
 
 class ReasoningKernel:
     """Coordina un planificador y un enrutador manteniendo estado interno."""
 
-    def __init__(self, planner: Planner, router: MetaRouter) -> None:
+    def __init__(
+        self,
+        planner: Planner,
+        router: MetaRouter,
+        evaluator: MetaEvaluator | None = None,
+    ) -> None:
         self.planner = planner
         self.router = router
+        self.evaluator = evaluator
         self._state: Dict[str, Any] = {}
         self.history: List[Dict[str, Any]] = []
 
@@ -65,6 +72,10 @@ class ReasoningKernel:
             self._state.update(result)
         else:
             self._state["result"] = result
+
+        if self.evaluator is not None:
+            self.evaluator.evaluar_ciclo({"result": result, "state": self._state})
+
         return result
 
     def run(self, max_iterations: int = 10) -> Dict[str, Any]:
@@ -104,10 +115,23 @@ class ReasoningKernel:
                     self.history.append({"step": step, "result": result})
                 except Exception as exc:  # pragma: no cover - error del experto
                     self.history.append({"step": step, "error": str(exc)})
+                    if self.evaluator is not None:
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        if sugerencia:
+                            self._state.update(sugerencia)
                     return self._state
 
                 goals = self._state.get("goals", [])
                 if isinstance(goals, list) and all(self._state.get(g) for g in goals):
+                    if self.evaluator is not None:
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        if sugerencia:
+                            self._state.update(sugerencia)
                     return self._state
+
+            if self.evaluator is not None:
+                sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                if sugerencia:
+                    self._state.update(sugerencia)
 
         return self._state
