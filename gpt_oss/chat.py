@@ -168,7 +168,8 @@ def main(args):
         else:
             # Tool or function call
             if last_message.recipient.startswith("browser."):
-                assert args.browser, "Browser tool is not enabled"
+                if not args.browser:
+                    raise RuntimeError("Browser tool is not enabled")
                 tool_name = "Search"
                 async def run_tool():
                     results = []
@@ -179,7 +180,8 @@ def main(args):
                 result = asyncio.run(run_tool())
                 messages += result
             elif last_message.recipient.startswith("python"):
-                assert args.python, "Python tool is not enabled"
+                if not args.python:
+                    raise RuntimeError("Python tool is not enabled")
                 tool_name = "Python"
                 async def run_tool():
                     results = []
@@ -190,7 +192,8 @@ def main(args):
                 result = asyncio.run(run_tool())
                 messages += result
             elif last_message.recipient == "functions.apply_patch":
-                assert args.apply_patch, "Apply patch tool is not enabled"
+                if not args.apply_patch:
+                    raise RuntimeError("Apply patch tool is not enabled")
                 tool_name = "Apply Patch"
                 text = last_message.content[0].text
                 tool_output = None
