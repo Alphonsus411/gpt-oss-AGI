@@ -9,9 +9,12 @@ compartiendo esta información con componentes como ``ReasoningKernel``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import heapq
+
+from .strategic_memory import Episode, StrategicMemory
 
 
 @dataclass
@@ -34,6 +37,7 @@ class Planner:
     goals: List[Tuple[int, str]] = field(default_factory=list)
     mode: Optional[str] = None
     mode_parameters: Dict[str, Any] = field(default_factory=dict)
+    memory: Optional[StrategicMemory] = None
 
     def set_intention(self, intent: str) -> None:
         """Define la intención global del agente.
@@ -109,6 +113,10 @@ class Planner:
     def activate_mode(self, tipo: str) -> None:
         """Activa un modo de operación y configura sus parámetros.
 
+        Si existe memoria estratégica, consulta episodios previos exitosos del
+        mismo modo para ajustar parámetros como la temperatura en función de los
+        resultados observados.
+
         Parameters
         ----------
         tipo:
@@ -131,7 +139,52 @@ class Planner:
             raise ValueError(f"Modo no soportado: {tipo}")
 
         self.mode = tipo
-        self.mode_parameters = estrategias[tipo]
+        parametros = estrategias[tipo].copy()
+        if self.memory is not None:
+            episodios = self.memory.query({"mode": tipo, "outcome": "success"})
+            temps = [
+                ep.metadata.get("temperature")
+                for ep in episodios
+                if "temperature" in ep.metadata
+            ]
+            if temps:
+                parametros["temperature"] = sum(temps) / len(temps)
+        self.mode_parameters = parametros
+
+    def attach_memory(self, memory: StrategicMemory) -> None:
+        """Asocia una memoria estratégica al planificador."""
+
+        self.memory = memory
+
+    def record_episode(self, entrada: Any, accion: Any, resultado: Any) -> None:
+        """Registra un episodio del modo actual en la memoria.
+
+        El episodio incluye el modo activo y sus parámetros para que futuras
+        activaciones puedan ajustar dichos valores según el desempeño previo.
+
+        Parameters
+        ----------
+        entrada:
+            Información de entrada procesada.
+        accion:
+            Acción realizada.
+        resultado:
+            Desempeño obtenido (``success``, ``failure``, etc.).
+        """
+
+        if self.memory is None:
+            return
+        episodio = Episode(
+            timestamp=datetime.now(),
+            input=entrada,
+            action=accion,
+            outcome=resultado,
+            metadata={
+                "mode": self.mode,
+                "temperature": self.mode_parameters.get("temperature"),
+            },
+        )
+        self.memory.add_episode(episodio)
 
     def current_mode(self) -> Optional[str]:
         """Devuelve el modo actualmente activo, o ``None`` si no hay modo."""
