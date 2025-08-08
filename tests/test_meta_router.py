@@ -1,7 +1,11 @@
 """Pruebas para :mod:`meta_router`."""
 
-from meta_router import MetaRouter
+from datetime import datetime
+
 import pytest
+
+from meta_router import MetaRouter
+from gpt_oss.strategic_memory import Episode, StrategicMemory
 
 
 class DummyModule:
@@ -105,3 +109,51 @@ def test_no_expert_matches_raises_error():
     with pytest.raises(ValueError) as exc:
         router.route({"task": "other", "context": "x", "goals": ["z"]})
     assert "Ningún experto" in str(exc.value)
+
+
+def test_route_stores_episode():
+    memory = StrategicMemory()
+    router = MetaRouter(memory=memory)
+    dummy = DummyModule()
+    router.register(
+        "dummy",
+        dummy,
+        tasks=["t"],
+        contexts=["c"],
+        goals=["g"],
+    )
+    request = {"task": "t", "context": "c", "goals": ["g"]}
+    router.route(request)
+    episodes = memory.query({"task": "t", "context": "c", "goals": ["g"]})
+    assert episodes
+    assert episodes[0].metadata["expert"] == "dummy"
+
+
+def test_memory_adjusts_selection():
+    memory = StrategicMemory()
+    router = MetaRouter(memory=memory)
+    good = DummyModule()
+    bad = DummyModule()
+    router.register("good", good, tasks=["t"], contexts=["c"], goals=["g"])
+    router.register("bad", bad, tasks=["t"], contexts=["c"], goals=["g"])
+    # Registrar un fallo previo para "bad"
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.now(),
+            input={},
+            action="bad",
+            outcome="error",
+            metadata={
+                "task": "t",
+                "context": "c",
+                "goals": ["g"],
+                "expert": "bad",
+                "status": "failure",
+                "latency": 0,
+            },
+        )
+    )
+    request = {"task": "t", "context": "c", "goals": ["g"]}
+    router.route(request)
+    assert good.received is not None
+    assert bad.received is None
