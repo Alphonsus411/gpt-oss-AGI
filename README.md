@@ -408,7 +408,7 @@ To improve performance the tool caches requests so that the model can revisit a 
 The model was trained to use a python tool to perform calculations and other actions as part of its chain-of-thought. During the training the model used a stateful tool which makes running tools between CoT loops easier. This reference implementation, however, uses a stateless mode. As a result the PythonTool defines its own tool description to override the definition in [`openai-harmony`][harmony].
 
 > [!WARNING]
-> This implementation runs in a permissive Docker container which could be problematic in cases like prompt injections. It's serving as an example and you should consider implementing your own container restrictions in production.
+> This reference runs user code in a Docker container restricted to 1 CPU, ~256MB of memory, a PID limit of 64 and a 5 second execution timeout. It is still only an example; further hardening is recommended for production use.
 
 #### Usage
 

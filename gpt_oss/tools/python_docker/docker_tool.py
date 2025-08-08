@@ -3,6 +3,7 @@
 from typing import Any, AsyncIterator
 
 import docker
+import requests
 from openai_harmony import (
     Author,
     Content,
@@ -19,10 +20,20 @@ from ..tool import Tool
 
 _docker_client = None
 
+# Basic resource limits for the container
+_MEM_LIMIT = "256m"
+_CPU_LIMIT = 1.0  # number of CPUs
+_PIDS_LIMIT = 64
+_EXEC_TIMEOUT = 5  # seconds
+
 
 def call_python_script(script: str) -> str:
     """
-    Call a python script by writing it to a file in the container and executing it.
+    Execute a python script inside a temporary Docker container.
+
+    The container is created with basic CPU, memory and PID limits and is
+    destroyed after execution. Long running scripts are aborted after
+    ``_EXEC_TIMEOUT`` seconds.
     """
     global _docker_client
     if _docker_client is None:
@@ -43,17 +54,27 @@ def call_python_script(script: str) -> str:
         tar.addfile(tarinfo, io.BytesIO(script_bytes))
     tarstream.seek(0)
 
-    # 2. Start the container
+    # 2. Start the container with resource limits
     container = _docker_client.containers.create(
-        "python:3.11", command="sleep infinity", detach=True
+        "python:3.11",
+        command="sleep infinity",
+        detach=True,
+        mem_limit=_MEM_LIMIT,
+        nano_cpus=int(_CPU_LIMIT * 1e9),
+        pids_limit=_PIDS_LIMIT,
     )
     try:
         container.start()
         # 3. Put the script into the container
         container.put_archive(path="/tmp", data=tarstream.read())
-        # 4. Execute the script
-        exec_result = container.exec_run(f"python /tmp/{script_name}")
-        output = exec_result.output.decode("utf-8")
+        # 4. Execute the script with a timeout
+        try:
+            exec_result = container.exec_run(
+                f"python /tmp/{script_name}", timeout=_EXEC_TIMEOUT
+            )
+            output = exec_result.output.decode("utf-8")
+        except requests.exceptions.ReadTimeout:
+            output = "Execution timed out"
     finally:
         container.remove(force=True)
     return output
