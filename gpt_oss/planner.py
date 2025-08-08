@@ -142,11 +142,11 @@ class Planner:
         parametros = estrategias[tipo].copy()
         if self.memory is not None:
             episodios = self.memory.query({"mode": tipo, "outcome": "success"})
-            temps = [
-                ep.metadata.get("temperature")
-                for ep in episodios
-                if "temperature" in ep.metadata
-            ]
+            temps = []
+            for ep in episodios:
+                valor = ep.metadata.get("temperature")
+                if isinstance(valor, (int, float)):
+                    temps.append(valor)
             if temps:
                 parametros["temperature"] = sum(temps) / len(temps)
         self.mode_parameters = parametros

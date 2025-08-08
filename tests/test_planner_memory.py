@@ -59,3 +59,44 @@ def test_activate_mode_promedia_temperaturas_memoria() -> None:
     planner = Planner(memory=memory)
     planner.activate_mode("analytic")
     assert planner.get_mode_parameters()["temperature"] == pytest.approx(0.5)
+
+
+def test_activate_mode_ignora_valores_de_temperatura_invalidos() -> None:
+    memory = StrategicMemory()
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.now(),
+            input="i1",
+            action="a1",
+            outcome="success",
+            metadata={"mode": "analytic", "temperature": 0.6},
+        )
+    )
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.now(),
+            input="i2",
+            action="a2",
+            outcome="success",
+            metadata={"mode": "analytic", "temperature": "fría"},
+        )
+    )
+    planner = Planner(memory=memory)
+    planner.activate_mode("analytic")
+    assert planner.get_mode_parameters()["temperature"] == pytest.approx(0.6)
+
+
+def test_activate_mode_sin_valores_validos_mantiene_default() -> None:
+    memory = StrategicMemory()
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.now(),
+            input="i",
+            action="a",
+            outcome="success",
+            metadata={"mode": "analytic", "temperature": "alta"},
+        )
+    )
+    planner = Planner(memory=memory)
+    planner.activate_mode("analytic")
+    assert planner.get_mode_parameters()["temperature"] == pytest.approx(0.5)
