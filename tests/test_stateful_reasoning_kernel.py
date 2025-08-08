@@ -2,6 +2,7 @@
 
 import sys
 import types
+import builtins
 
 # ``ReasoningKernel`` depende de ``agix`` para el planificador. Para aislar las
 # pruebas y evitar dependencias externas, se inserta un stub mínimo en
@@ -69,6 +70,37 @@ def test_evaluate_step_else_branch():
     assert result == {"count": -3}
     assert kernel.get_state()["count"] == -3
     assert dec.calls[0]["payload"] == 3
+
+
+def test_evaluate_step_allows_basic_expression():
+    kernel, inc, _ = make_kernel()
+    kernel.set_state({"context": "ctx", "goals": ["g"], "count": 1, "done": False})
+    step = {
+        "if": "count + 1 < 5 and not done",
+        "then": {"task": "inc", "payload": 2},
+        "else": {"task": "dec", "payload": 1},
+    }
+    result = kernel.evaluate_step(step)
+    assert result == {"count": 3}
+    assert inc.calls[0]["payload"] == 2
+
+
+def test_evaluate_step_rejects_malicious_expression(monkeypatch):
+    kernel, _, dec = make_kernel()
+    kernel.set_state({"context": "ctx", "goals": ["g"], "count": 0})
+
+    def forbidden_import(*args, **kwargs):
+        raise AssertionError("Importación no permitida")
+
+    monkeypatch.setattr(builtins, "__import__", forbidden_import)
+    step = {
+        "if": "__import__('os').system('echo hacked')",
+        "then": {"task": "inc", "payload": 2},
+        "else": {"task": "dec", "payload": 1},
+    }
+    result = kernel.evaluate_step(step)
+    assert result == {"count": -1}
+    assert dec.calls[0]["payload"] == 1
 
 
 class DummyPlanner:

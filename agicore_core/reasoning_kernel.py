@@ -5,12 +5,83 @@ from __future__ import annotations
 from typing import Any, Dict, Iterator, List
 import time
 from datetime import datetime
+import ast
+import operator as op
 
 from meta_router import MetaRouter
 from gpt_oss.strategic_memory import Episode, StrategicMemory
 
 from .planner import Planner
 from .meta_evaluator import MetaEvaluator
+
+
+_BIN_OPS = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
+    ast.Mod: op.mod,
+    ast.Pow: op.pow,
+}
+
+_CMP_OPS = {
+    ast.Eq: op.eq,
+    ast.NotEq: op.ne,
+    ast.Lt: op.lt,
+    ast.LtE: op.le,
+    ast.Gt: op.gt,
+    ast.GtE: op.ge,
+}
+
+_UNARY_OPS = {
+    ast.Not: op.not_,
+    ast.USub: op.neg,
+}
+
+
+def _safe_eval_condition(expr: str, variables: Dict[str, Any]) -> bool:
+    """Evalúa ``expr`` de forma segura.
+
+    Operadores permitidos: ``and``, ``or``, ``not``; ``+``, ``-``, ``*``, ``/``,
+    ``%`` y ``**``; comparaciones ``==``, ``!=``, ``<``, ``<=``, ``>`` y ``>=``.
+    Solo pueden usarse variables presentes en ``variables``. No se permiten
+    llamadas a funciones ni acceso a atributos.
+    """
+
+    tree = ast.parse(expr, mode="eval")
+
+    def _eval(node: ast.AST):  # type: ignore[return-type]
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.BoolOp):
+            if isinstance(node.op, ast.And):
+                return all(_eval(v) for v in node.values)
+            if isinstance(node.op, ast.Or):
+                return any(_eval(v) for v in node.values)
+            raise ValueError("Operador booleano no permitido")
+        if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
+            return _BIN_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
+            return _UNARY_OPS[type(node.op)](_eval(node.operand))
+        if isinstance(node, ast.Compare):
+            left = _eval(node.left)
+            for op_node, comp in zip(node.ops, node.comparators):
+                if type(op_node) not in _CMP_OPS:
+                    raise ValueError("Operador de comparación no permitido")
+                right = _eval(comp)
+                if not _CMP_OPS[type(op_node)](left, right):
+                    return False
+                left = right
+            return True
+        if isinstance(node, ast.Name):
+            if node.id in variables:
+                return variables[node.id]
+            raise ValueError(f"Variable no permitida: {node.id}")
+        if isinstance(node, ast.Constant):
+            return node.value
+        raise ValueError("Expresión no permitida")
+
+    return bool(_eval(tree))
 
 
 class ReasoningKernel:
@@ -45,10 +116,15 @@ class ReasoningKernel:
         """Evalúa un ``step`` con ramificación condicional.
 
         Cada ``step`` puede incluir las claves opcionales ``if``, ``then`` y
-        ``else``. La condición indicada en ``if`` se evalúa en el contexto del
-        estado actual. Dependiendo de su resultado se selecciona la rama
-        ``then`` o ``else`` y se fusiona con el resto del paso y con el estado
-        antes de delegar la ejecución al :class:`MetaRouter`.
+        ``else``. La condición indicada en ``if`` se analiza de forma segura en
+        el contexto del estado actual. Se admiten operadores aritméticos básicos
+        (``+``, ``-``, ``*``, ``/``, ``%``, ``**``), comparaciones (``==``, ``!=``,
+        ``<``, ``<=``, ``>``, ``>=``) y operadores booleanos (``and``, ``or``,
+        ``not``). Solo pueden referenciarse variables presentes en ``state``; no
+        se permiten llamadas a funciones ni acceso a atributos. Dependiendo del
+        resultado, se selecciona la rama ``then`` o ``else`` y se fusiona con el
+        resto del paso y con el estado antes de delegar la ejecución al
+        :class:`MetaRouter`.
 
         El resultado devuelto por el enrutador se incorpora al estado: si es un
         ``dict`` se combina mediante :py:meth:`dict.update`; en caso contrario se
@@ -63,7 +139,7 @@ class ReasoningKernel:
         if condition is not None:
             if isinstance(condition, str):
                 try:
-                    condition_value = bool(eval(condition, {}, self._state))
+                    condition_value = _safe_eval_condition(condition, self._state)
                 except Exception:
                     condition_value = False
             else:
