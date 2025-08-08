@@ -38,6 +38,11 @@ _UNARY_OPS = {
     ast.USub: op.neg,
 }
 
+# Límites de seguridad para la evaluación de expresiones
+_MAX_AST_NODES = 100
+_MAX_NUMERIC_VALUE = 1e6
+_MAX_RECURSION_DEPTH = 50
+
 
 def _safe_eval_condition(expr: str, variables: Dict[str, Any]) -> bool:
     """Evalúa ``expr`` de forma segura.
@@ -45,30 +50,45 @@ def _safe_eval_condition(expr: str, variables: Dict[str, Any]) -> bool:
     Operadores permitidos: ``and``, ``or``, ``not``; ``+``, ``-``, ``*``, ``/``,
     ``%`` y ``**``; comparaciones ``==``, ``!=``, ``<``, ``<=``, ``>`` y ``>=``.
     Solo pueden usarse variables presentes en ``variables``. No se permiten
-    llamadas a funciones ni acceso a atributos.
+    llamadas a funciones ni acceso a atributos. Además, se limita la complejidad
+    de la expresión, la magnitud de los valores numéricos y la profundidad de
+    la recursión durante la evaluación.
     """
 
     tree = ast.parse(expr, mode="eval")
+    if sum(1 for _ in ast.walk(tree)) > _MAX_AST_NODES:
+        raise ValueError("Expresión demasiado compleja")
 
-    def _eval(node: ast.AST):  # type: ignore[return-type]
+    def _check_number(value: Any) -> Any:
+        if isinstance(value, (int, float)) and abs(value) > _MAX_NUMERIC_VALUE:
+            raise ValueError("Valor numérico fuera de rango")
+        return value
+
+    def _eval(node: ast.AST, depth: int = 0):  # type: ignore[return-type]
+        if depth > _MAX_RECURSION_DEPTH:
+            raise ValueError("Expresión demasiado profunda")
         if isinstance(node, ast.Expression):
-            return _eval(node.body)
+            return _eval(node.body, depth + 1)
         if isinstance(node, ast.BoolOp):
             if isinstance(node.op, ast.And):
-                return all(_eval(v) for v in node.values)
+                return all(_eval(v, depth + 1) for v in node.values)
             if isinstance(node.op, ast.Or):
-                return any(_eval(v) for v in node.values)
+                return any(_eval(v, depth + 1) for v in node.values)
             raise ValueError("Operador booleano no permitido")
         if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
-            return _BIN_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+            result = _BIN_OPS[type(node.op)](
+                _eval(node.left, depth + 1), _eval(node.right, depth + 1)
+            )
+            return _check_number(result)
         if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
-            return _UNARY_OPS[type(node.op)](_eval(node.operand))
+            result = _UNARY_OPS[type(node.op)](_eval(node.operand, depth + 1))
+            return _check_number(result)
         if isinstance(node, ast.Compare):
-            left = _eval(node.left)
+            left = _eval(node.left, depth + 1)
             for op_node, comp in zip(node.ops, node.comparators):
                 if type(op_node) not in _CMP_OPS:
                     raise ValueError("Operador de comparación no permitido")
-                right = _eval(comp)
+                right = _eval(comp, depth + 1)
                 if not _CMP_OPS[type(op_node)](left, right):
                     return False
                 left = right
@@ -78,7 +98,7 @@ def _safe_eval_condition(expr: str, variables: Dict[str, Any]) -> bool:
                 return variables[node.id]
             raise ValueError(f"Variable no permitida: {node.id}")
         if isinstance(node, ast.Constant):
-            return node.value
+            return _check_number(node.value)
         raise ValueError("Expresión no permitida")
 
     return bool(_eval(tree))
