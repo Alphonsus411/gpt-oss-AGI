@@ -35,24 +35,34 @@ if __name__ == "__main__":
         # default to metal on macOS, triton on other platforms
         default="metal" if __import__("platform").system() == "Darwin" else "triton",
     )
+    parser.add_argument(
+        "--ollama-url",
+        metavar="URL",
+        type=str,
+        default=None,
+        help="URL del endpoint Ollama cuando se usa el backend 'ollama'",
+    )
     args = parser.parse_args()
-
     if args.inference_backend == "triton":
         from .inference.triton import setup_model
+        infer_next_token = setup_model(args.checkpoint)
     elif args.inference_backend == "stub":
         from .inference.stub import setup_model
+        infer_next_token = setup_model(args.checkpoint)
     elif args.inference_backend == "metal":
         from .inference.metal import setup_model
+        infer_next_token = setup_model(args.checkpoint)
     elif args.inference_backend == "ollama":
         from .inference.ollama import setup_model
+        infer_next_token = setup_model(args.checkpoint, endpoint_url=args.ollama_url)
     elif args.inference_backend == "vllm":
         from .inference.vllm import setup_model
+        infer_next_token = setup_model(args.checkpoint)
     elif args.inference_backend == "transformers":
         from .inference.transformers import setup_model
+        infer_next_token = setup_model(args.checkpoint)
     else:
         raise ValueError(f"Invalid inference backend: {args.inference_backend}")
 
     encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
-
-    infer_next_token = setup_model(args.checkpoint)
     uvicorn.run(create_api_server(infer_next_token, encoding), port=args.port)
