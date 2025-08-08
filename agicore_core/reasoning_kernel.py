@@ -119,6 +119,7 @@ class ReasoningKernel:
                         sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
                         if sugerencia:
                             self._state.update(sugerencia)
+                        self.evaluator.reflexionar(self.history)
                     return self._state
 
                 goals = self._state.get("goals", [])
@@ -127,11 +128,15 @@ class ReasoningKernel:
                         sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
                         if sugerencia:
                             self._state.update(sugerencia)
+                        self.evaluator.reflexionar(self.history)
                     return self._state
 
             if self.evaluator is not None:
                 sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
                 if sugerencia:
                     self._state.update(sugerencia)
+
+        if self.evaluator is not None:
+            self.evaluator.reflexionar(self.history)
 
         return self._state
