@@ -11,9 +11,12 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 import json
+import logging
 from pathlib import Path
 
 from agix.orchestrator import VirtualQualia
+
+logger = logging.getLogger(__name__)
 
 
 class Planner:
@@ -34,7 +37,8 @@ class Planner:
         try:
             with config_path.open("r", encoding="utf-8") as f:
                 self.agent_profile = json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to load agent profile: %s", exc)
             self.agent_profile = {}
 
     def plan(self, state: Dict[str, Any]) -> List[Any]:
