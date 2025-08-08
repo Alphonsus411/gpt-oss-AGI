@@ -102,3 +102,22 @@ results = kernel.execute_plan(plan, task="math", context="cli", goals=["calculat
 
 En este ejemplo, el primer paso será atendido por `sumador` y el segundo por
 `traductor`, demostrando cómo la selección automática depende de los metadatos.
+
+## Meta Evaluación y Reflexión
+
+El flujo `planner → reasoning_kernel → meta_router` puede complementarse con un
+`MetaEvaluator` que registre métricas de cada ciclo y proponga ajustes
+automáticos. Para activarlo basta con instanciarlo junto al
+`ReasoningKernel`:
+
+```python
+from agicore_core import Planner, ReasoningKernel, MetaEvaluator
+
+router = MetaRouter()
+kernel = ReasoningKernel(Planner(), router, evaluator=MetaEvaluator())
+```
+
+El evaluador analiza los resultados devueltos por los expertos y puede sugerir
+reconfiguraciones del estado, como optimizar componentes lentos o reducir la
+tasa de aprendizaje. Más detalles y estrategias avanzadas se describen en
+`docs/meta_evaluator.md`.
