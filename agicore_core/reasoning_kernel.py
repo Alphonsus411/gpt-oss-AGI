@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterator, List
 import time
+from datetime import datetime
 
 from meta_router import MetaRouter
+from gpt_oss.strategic_memory import Episode, StrategicMemory
 
 from .planner import Planner
 from .meta_evaluator import MetaEvaluator
@@ -19,10 +21,12 @@ class ReasoningKernel:
         planner: Planner,
         router: MetaRouter,
         evaluator: MetaEvaluator | None = None,
+        memory: StrategicMemory | None = None,
     ) -> None:
         self.planner = planner
         self.router = router
         self.evaluator = evaluator
+        self.memory = memory
         self._state: Dict[str, Any] = {}
         self.history: List[Dict[str, Any]] = []
         self._token_generator: Iterator[Any] | None = None
@@ -87,6 +91,16 @@ class ReasoningKernel:
             "introspeccion": introspeccion,
         })
 
+        if self.memory is not None:
+            episodio = Episode(
+                timestamp=datetime.utcnow(),
+                input=step,
+                action="step",
+                outcome=result,
+                metadata=dict(self._state),
+            )
+            self.memory.add_episode(episodio)
+
         return result
 
     def run_token_cycle(
@@ -115,13 +129,26 @@ class ReasoningKernel:
 
         count = 0
         while max_tokens is None or count < max_tokens:
+            if self.memory is not None:
+                for episodio in self.memory.query(self._state):
+                    self._state.update(episodio.metadata)
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
-            token = self.router.route(request)
-            if token is None:
+            siguiente = self.router.route(request)
+            if siguiente is None:
                 break
-            self._state["last_token"] = token
-            yield token
+            if self.memory is not None:
+                episodio = Episode(
+                    timestamp=datetime.utcnow(),
+                    input=token,
+                    action="token",
+                    outcome=siguiente,
+                    metadata=dict(self._state),
+                )
+                self.memory.add_episode(episodio)
+            self._state["last_token"] = siguiente
+            yield siguiente
             count += 1
+            token = siguiente
 
     def start_token_cycle(self, token: Any, metas: Dict[str, Any]) -> None:
         """Inicializa un ciclo de generación de tokens."""

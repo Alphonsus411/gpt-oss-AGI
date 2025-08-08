@@ -121,3 +121,12 @@ El evaluador analiza los resultados devueltos por los expertos y puede sugerir
 reconfiguraciones del estado, como optimizar componentes lentos o reducir la
 tasa de aprendizaje. Más detalles y estrategias avanzadas se describen en
 `docs/meta_evaluator.md`.
+
+## Integración con StrategicMemory
+
+`ReasoningKernel` puede recibir una instancia opcional de
+`StrategicMemory`. Tras cada paso o token exitoso se crea un `Episode`
+con la entrada, la salida y una copia del estado. Antes de generar un
+nuevo token, el kernel consulta la memoria con el estado actual y fusiona
+los metadatos de los episodios recuperados, permitiendo aprovechar
+experiencias pasadas en el flujo de planificación.
