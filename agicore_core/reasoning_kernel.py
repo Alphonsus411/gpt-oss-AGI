@@ -43,6 +43,16 @@ _MAX_AST_NODES = 100
 _MAX_NUMERIC_VALUE = 1e6
 _MAX_RECURSION_DEPTH = 50
 
+# Claves de metadata permitidas para hidratar el estado desde la memoria
+_ALLOWED_METADATA_KEYS = {
+    "context",
+    "mode",
+    "temperature",
+    "goals",
+    "result",
+    "last_token",
+}
+
 
 def _safe_eval_condition(expr: str, variables: Dict[str, Any]) -> bool:
     """Evalúa ``expr`` de forma segura.
@@ -227,7 +237,12 @@ class ReasoningKernel:
         while max_tokens is None or count < max_tokens:
             if self.memory is not None:
                 for episodio in self.memory.query(self._state):
-                    self._state.update(episodio.metadata)
+                    metadata_filtrada = {
+                        k: v
+                        for k, v in episodio.metadata.items()
+                        if k in _ALLOWED_METADATA_KEYS
+                    }
+                    self._state.update(metadata_filtrada)
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
             siguiente = self.router.route(request)
             if siguiente is None:
