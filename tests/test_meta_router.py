@@ -44,6 +44,26 @@ def test_unknown_task_raises_error():
         router.route({"task": "missing", "context": "", "goals": []})
 
 
+def test_route_accepts_goals_list_of_strings():
+    router = MetaRouter()
+    dummy = DummyModule()
+    router.register("dummy", dummy, tasks=["t"], contexts=["c"], goals=["g"])
+    request = {"task": "t", "context": "c", "goals": ["g"]}
+    assert router.route(request) == "ok"
+
+
+def test_route_rejects_non_list_goals():
+    router = MetaRouter()
+    with pytest.raises(ValueError):
+        router.route({"task": "t", "context": "c", "goals": "g"})
+
+
+def test_route_rejects_non_string_items_in_goals():
+    router = MetaRouter()
+    with pytest.raises(ValueError):
+        router.route({"task": "t", "context": "c", "goals": [1, "g"]})
+
+
 def test_selects_correct_expert_among_multiple():
     router = MetaRouter()
     first = DummyModule()

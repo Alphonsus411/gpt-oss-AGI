@@ -88,6 +88,9 @@ class MetaRouter:
     ) -> Dict[str, int]:
         """Calcula un puntaje para cada experto registrado.
 
+        Asume que ``goals`` es una lista de cadenas previamente validada
+        por :meth:`route`.
+
         Antes de evaluar a cada experto, se consultan los episodios
         almacenados en memoria que coincidan con los parámetros recibidos.
         Los resultados previos influyen en el puntaje final de cada experto
@@ -167,6 +170,8 @@ class MetaRouter:
             raise ValueError(
                 "La solicitud debe incluir 'task', 'context' y 'goals'",
             )
+        if not isinstance(goals, list) or not all(isinstance(g, str) for g in goals):
+            raise ValueError("La clave 'goals' debe ser una lista de cadenas")
 
         scores = self.select_expert(
             task,
