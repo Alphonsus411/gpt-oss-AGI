@@ -66,3 +66,31 @@ def test_summarize_episodes():
     resumen = memoria.summarize()
     assert resumen["total"] == 2
     assert resumen["actions"][0][0] == "a"
+
+
+def test_add_episode_query_and_summarize_multiple():
+    memoria = StrategicMemory()
+    ep1 = Episode(
+        timestamp=datetime.utcnow(),
+        input="i1",
+        action="alpha",
+        outcome="ok",
+        metadata={"tag": 1},
+    )
+    ep2 = Episode(
+        timestamp=datetime.utcnow(),
+        input="i2",
+        action="beta",
+        outcome="fail",
+        metadata={"tag": 2},
+    )
+    memoria.add_episode(ep1)
+    memoria.add_episode(ep2)
+
+    assert memoria.query({"tag": 1}) == [ep1]
+    assert memoria.query({"action": "beta"}) == [ep2]
+
+    resumen = memoria.summarize()
+    assert resumen["total"] == 2
+    assert ("alpha", 1) in resumen["actions"]
+    assert ("fail", 1) in resumen["outcomes"]

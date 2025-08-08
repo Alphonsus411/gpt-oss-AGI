@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import pytest
+
 from gpt_oss.planner import Planner
 from gpt_oss.strategic_memory import Episode, StrategicMemory
 
@@ -32,3 +34,28 @@ def test_record_episode_guarda_modo_y_temperatura() -> None:
     ep = episodios[0]
     assert ep.outcome == "success"
     assert ep.metadata["temperature"] == planner.get_mode_parameters()["temperature"]
+
+
+def test_activate_mode_promedia_temperaturas_memoria() -> None:
+    memory = StrategicMemory()
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.now(),
+            input="i1",
+            action="a1",
+            outcome="success",
+            metadata={"mode": "analytic", "temperature": 0.4},
+        )
+    )
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.now(),
+            input="i2",
+            action="a2",
+            outcome="success",
+            metadata={"mode": "analytic", "temperature": 0.6},
+        )
+    )
+    planner = Planner(memory=memory)
+    planner.activate_mode("analytic")
+    assert planner.get_mode_parameters()["temperature"] == pytest.approx(0.5)
