@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List
 
 from meta_router import MetaRouter
 
@@ -24,6 +24,7 @@ class ReasoningKernel:
         self.evaluator = evaluator
         self._state: Dict[str, Any] = {}
         self.history: List[Dict[str, Any]] = []
+        self._token_generator: Iterator[Any] | None = None
 
     def set_state(self, state: Dict[str, Any]) -> None:
         """Establece el ``state`` inicial para el planificador."""
@@ -78,6 +79,58 @@ class ReasoningKernel:
 
         return result
 
+    def run_token_cycle(
+        self,
+        token: Any,
+        metas: Dict[str, Any],
+        *,
+        max_tokens: int | None = None,
+    ) -> Iterator[Any]:
+        """Genera tokens sucesivos delegando en ``MetaRouter``.
+
+        Parameters
+        ----------
+        token:
+            Token inicial recibido del :class:`Planner`.
+        metas:
+            Metadatos que incluyen las metas a satisfacer.
+        max_tokens:
+            Número máximo de tokens a generar. Si es ``None`` no hay límite.
+
+        Yields
+        ------
+        Any
+            Tokens producidos por el enrutador.
+        """
+
+        count = 0
+        while max_tokens is None or count < max_tokens:
+            request: Dict[str, Any] = {**self._state, **metas, "token": token}
+            token = self.router.route(request)
+            if token is None:
+                break
+            self._state["last_token"] = token
+            yield token
+            count += 1
+
+    def start_token_cycle(self, token: Any, metas: Dict[str, Any]) -> None:
+        """Inicializa un ciclo de generación de tokens."""
+
+        self._token_generator = self.run_token_cycle(token, metas)
+
+    def continue_token_cycle(self) -> Any:
+        """Avanza un paso en el ciclo de tokens iniciado."""
+
+        if self._token_generator is None:
+            raise ValueError("El ciclo de tokens no ha sido iniciado")
+        try:
+            token = next(self._token_generator)
+        except StopIteration:
+            self._token_generator = None
+            return None
+        self.history.append({"token": token})
+        return token
+
     def run(self, max_iterations: int = 10) -> Dict[str, Any]:
         """Genera planes y ejecuta pasos hasta cumplir las metas.
 
@@ -102,41 +155,49 @@ class ReasoningKernel:
         if self.planner is None:
             raise ValueError("Se requiere un Planner para ejecutar 'run'")
 
-        for iteration in range(max_iterations):
-            try:
-                plan = self.planner.plan(self._state)
-            except Exception as exc:  # pragma: no cover - planificación fallida
-                self.history.append({"iteration": iteration, "error": str(exc)})
-                break
+        try:
+            plan = self.planner.plan(self._state)
+        except Exception as exc:  # pragma: no cover - planificación fallida
+            self.history.append({"error": str(exc)})
+            return self._state
 
-            for step in plan:
-                try:
-                    result = self.evaluate_step(step)
-                    self.history.append({"step": step, "result": result})
-                except Exception as exc:  # pragma: no cover - error del experto
-                    self.history.append({"step": step, "error": str(exc)})
-                    if self.evaluator is not None:
-                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
-                        if sugerencia:
-                            self._state.update(sugerencia)
-                        self.evaluator.reflexionar(self.history)
-                    return self._state
-
-                goals = self._state.get("goals", [])
-                if isinstance(goals, list) and all(self._state.get(g) for g in goals):
-                    if self.evaluator is not None:
-                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
-                        if sugerencia:
-                            self._state.update(sugerencia)
-                        self.evaluator.reflexionar(self.history)
-                    return self._state
-
+        if isinstance(plan, dict) and "token" in plan:
+            token = plan["token"]
+            metas = {k: v for k, v in plan.items() if k != "token"}
+            self.start_token_cycle(token, metas)
+            for _ in range(max_iterations):
+                if self.continue_token_cycle() is None:
+                    break
             if self.evaluator is not None:
-                sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
-                if sugerencia:
-                    self._state.update(sugerencia)
+                self.evaluator.reflexionar(self.history)
+            return self._state
+
+        for iteration, step in enumerate(plan):
+            try:
+                result = self.evaluate_step(step)
+                self.history.append({"step": step, "result": result})
+            except Exception as exc:  # pragma: no cover - error del experto
+                self.history.append({"step": step, "error": str(exc)})
+                if self.evaluator is not None:
+                    sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                    if sugerencia:
+                        self._state.update(sugerencia)
+                    self.evaluator.reflexionar(self.history)
+                return self._state
+
+            goals = self._state.get("goals", [])
+            if isinstance(goals, list) and all(self._state.get(g) for g in goals):
+                if self.evaluator is not None:
+                    sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                    if sugerencia:
+                        self._state.update(sugerencia)
+                    self.evaluator.reflexionar(self.history)
+                return self._state
 
         if self.evaluator is not None:
+            sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+            if sugerencia:
+                self._state.update(sugerencia)
             self.evaluator.reflexionar(self.history)
 
         return self._state
