@@ -50,6 +50,21 @@ class Commit:
 class DiffError(ValueError):
     """Any problem detected while parsing or applying a patch."""
 
+ROOT = pathlib.Path.cwd().resolve()
+
+
+def _resolve_within_root(path: str) -> pathlib.Path:
+    target = (ROOT / path).resolve()
+    try:
+        target.relative_to(ROOT)
+    except ValueError as exc:
+        raise DiffError(f"Path outside repository: {path}") from exc
+    return target
+
+
+def normalize_path(path: str) -> str:
+    return str(_resolve_within_root(path).relative_to(ROOT))
+
 
 # --------------------------------------------------------------------------- #
 #  Helper dataclasses used while parsing patches
@@ -136,20 +151,23 @@ class Parser:
             # ---------- UPDATE ---------- #
             path = self.read_str("*** Update File: ")
             if path:
+                path = normalize_path(path)
                 if path in self.patch.actions:
                     raise DiffError(f"Duplicate update for file: {path}")
                 move_to = self.read_str("*** Move to: ")
+                move_to = normalize_path(move_to) if move_to else None
                 if path not in self.current_files:
                     raise DiffError(f"Update File Error - missing file: {path}")
                 text = self.current_files[path]
                 action = self._parse_update_file(text)
-                action.move_path = move_to or None
+                action.move_path = move_to
                 self.patch.actions[path] = action
                 continue
 
             # ---------- DELETE ---------- #
             path = self.read_str("*** Delete File: ")
             if path:
+                path = normalize_path(path)
                 if path in self.patch.actions:
                     raise DiffError(f"Duplicate delete for file: {path}")
                 if path not in self.current_files:
@@ -160,6 +178,7 @@ class Parser:
             # ---------- ADD ---------- #
             path = self.read_str("*** Add File: ")
             if path:
+                path = normalize_path(path)
                 if path in self.patch.actions:
                     raise DiffError(f"Duplicate add for file: {path}")
                 if path in self.current_files:
@@ -430,11 +449,11 @@ def text_to_patch(text: str, orig: Dict[str, str]) -> Tuple[Patch, int]:
 def identify_files_needed(text: str) -> List[str]:
     lines = text.splitlines()
     return [
-        line[len("*** Update File: ") :]
+        normalize_path(line[len("*** Update File: ") :])
         for line in lines
         if line.startswith("*** Update File: ")
     ] + [
-        line[len("*** Delete File: ") :]
+        normalize_path(line[len("*** Delete File: ") :])
         for line in lines
         if line.startswith("*** Delete File: ")
     ]
@@ -443,7 +462,7 @@ def identify_files_needed(text: str) -> List[str]:
 def identify_files_added(text: str) -> List[str]:
     lines = text.splitlines()
     return [
-        line[len("*** Add File: ") :]
+        normalize_path(line[len("*** Add File: ") :])
         for line in lines
         if line.startswith("*** Add File: ")
     ]
@@ -453,7 +472,11 @@ def identify_files_added(text: str) -> List[str]:
 #  File-system helpers
 # --------------------------------------------------------------------------- #
 def load_files(paths: List[str], open_fn: Callable[[str], str]) -> Dict[str, str]:
-    return {path: open_fn(path) for path in paths}
+    result: Dict[str, str] = {}
+    for path in paths:
+        norm = normalize_path(path)
+        result[norm] = open_fn(norm)
+    return result
 
 
 def apply_commit(
@@ -478,19 +501,20 @@ def apply_commit(
 
 
 def open_file(path: str) -> str:
-    with open(path, "rt", encoding="utf-8") as fh:
+    target = _resolve_within_root(path)
+    with target.open("rt", encoding="utf-8") as fh:
         return fh.read()
 
 
 def write_file(path: str, content: str) -> None:
-    target = pathlib.Path(path)
+    target = _resolve_within_root(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("wt", encoding="utf-8") as fh:
         fh.write(content)
 
 
 def remove_file(path: str) -> None:
-    pathlib.Path(path).unlink(missing_ok=True)
+    _resolve_within_root(path).unlink(missing_ok=True)
 
 
 
