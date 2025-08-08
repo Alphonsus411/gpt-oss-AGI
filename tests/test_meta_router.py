@@ -157,3 +157,54 @@ def test_memory_adjusts_selection():
     router.route(request)
     assert good.received is not None
     assert bad.received is None
+
+
+def test_scores_update_with_episode_history():
+    memory = StrategicMemory()
+    router = MetaRouter(memory=memory)
+    good = DummyModule()
+    bad = DummyModule()
+    router.register("good", good, tasks=["t"], contexts=["c"], goals=["g"])
+    router.register("bad", bad, tasks=["t"], contexts=["c"], goals=["g"])
+
+    for _ in range(2):
+        memory.add_episode(
+            Episode(
+                timestamp=datetime.now(),
+                input={},
+                action="good",
+                outcome="ok",
+                metadata={
+                    "task": "t",
+                    "context": "c",
+                    "goals": ["g"],
+                    "expert": "good",
+                    "status": "success",
+                    "latency": 0,
+                },
+            )
+        )
+    for _ in range(2):
+        memory.add_episode(
+            Episode(
+                timestamp=datetime.now(),
+                input={},
+                action="bad",
+                outcome="err",
+                metadata={
+                    "task": "t",
+                    "context": "c",
+                    "goals": ["g"],
+                    "expert": "bad",
+                    "status": "failure",
+                    "latency": 0,
+                },
+            )
+        )
+
+    scores = router.select_expert("t", "c", ["g"])
+    assert scores["good"] > scores["bad"]
+
+    router.route({"task": "t", "context": "c", "goals": ["g"]})
+    assert good.received is not None
+    assert bad.received is None
