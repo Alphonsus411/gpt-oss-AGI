@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Iterator, List
+import time
 
 from meta_router import MetaRouter
 
@@ -74,8 +75,17 @@ class ReasoningKernel:
         else:
             self._state["result"] = result
 
+        introspeccion = None
         if self.evaluator is not None:
-            self.evaluator.evaluar_ciclo({"result": result, "state": self._state})
+            introspeccion = self.evaluator.evaluar_ciclo(
+                {"result": result, "state": self._state}
+            )
+        # Registrar paso e introspección para reflexiones futuras
+        self.history.append({
+            "step": step,
+            "result": result,
+            "introspeccion": introspeccion,
+        })
 
         return result
 
@@ -123,12 +133,22 @@ class ReasoningKernel:
 
         if self._token_generator is None:
             raise ValueError("El ciclo de tokens no ha sido iniciado")
+        start = time.perf_counter()
         try:
             token = next(self._token_generator)
         except StopIteration:
             self._token_generator = None
             return None
-        self.history.append({"token": token})
+        latency = time.perf_counter() - start
+        metricas = {"latencia": latency, "exito": True}
+        introspeccion = None
+        if self.evaluator is not None:
+            introspeccion = self.evaluator.evaluar_ciclo(metricas)
+        self.history.append({
+            "token": token,
+            "metricas": metricas,
+            "introspeccion": introspeccion,
+        })
         return token
 
     def run(self, max_iterations: int = 10) -> Dict[str, Any]:
@@ -155,49 +175,60 @@ class ReasoningKernel:
         if self.planner is None:
             raise ValueError("Se requiere un Planner para ejecutar 'run'")
 
-        try:
-            plan = self.planner.plan(self._state)
-        except Exception as exc:  # pragma: no cover - planificación fallida
-            self.history.append({"error": str(exc)})
-            return self._state
-
-        if isinstance(plan, dict) and "token" in plan:
-            token = plan["token"]
-            metas = {k: v for k, v in plan.items() if k != "token"}
-            self.start_token_cycle(token, metas)
-            for _ in range(max_iterations):
-                if self.continue_token_cycle() is None:
-                    break
-            if self.evaluator is not None:
-                self.evaluator.reflexionar(self.history)
-            return self._state
-
-        for iteration, step in enumerate(plan):
+        for _ in range(max_iterations):
             try:
-                result = self.evaluate_step(step)
-                self.history.append({"step": step, "result": result})
-            except Exception as exc:  # pragma: no cover - error del experto
-                self.history.append({"step": step, "error": str(exc)})
+                plan = self.planner.plan(self._state)
+            except Exception as exc:  # pragma: no cover - planificación fallida
+                self.history.append({"error": str(exc)})
+                return self._state
+
+            if isinstance(plan, dict) and "token" in plan:
+                token = plan["token"]
+                metas = {k: v for k, v in plan.items() if k != "token"}
+                self.start_token_cycle(token, metas)
+                for _ in range(max_iterations):
+                    if self.continue_token_cycle() is None:
+                        break
                 if self.evaluator is not None:
                     sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
                     if sugerencia:
                         self._state.update(sugerencia)
+                        if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                            self.planner.aplicar_sugerencias(sugerencia)
                     self.evaluator.reflexionar(self.history)
                 return self._state
 
-            goals = self._state.get("goals", [])
-            if isinstance(goals, list) and all(self._state.get(g) for g in goals):
-                if self.evaluator is not None:
-                    sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
-                    if sugerencia:
-                        self._state.update(sugerencia)
-                    self.evaluator.reflexionar(self.history)
-                return self._state
+            for step in plan:
+                try:
+                    self.evaluate_step(step)
+                except Exception as exc:  # pragma: no cover - error del experto
+                    self.history.append({"step": step, "error": str(exc)})
+                    if self.evaluator is not None:
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        if sugerencia:
+                            self._state.update(sugerencia)
+                            if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                                self.planner.aplicar_sugerencias(sugerencia)
+                        self.evaluator.reflexionar(self.history)
+                    return self._state
+
+                goals = self._state.get("goals", [])
+                if isinstance(goals, list) and all(self._state.get(g) for g in goals):
+                    if self.evaluator is not None:
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        if sugerencia:
+                            self._state.update(sugerencia)
+                            if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                                self.planner.aplicar_sugerencias(sugerencia)
+                        self.evaluator.reflexionar(self.history)
+                    return self._state
 
         if self.evaluator is not None:
             sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
             if sugerencia:
                 self._state.update(sugerencia)
+                if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                    self.planner.aplicar_sugerencias(sugerencia)
             self.evaluator.reflexionar(self.history)
 
         return self._state
