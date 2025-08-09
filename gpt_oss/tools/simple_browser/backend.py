@@ -7,7 +7,7 @@ import logging
 import os
 from abc import abstractmethod
 from typing import Callable, ParamSpec, TypeVar
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import chz
 from aiohttp import ClientSession, ClientTimeout
@@ -99,6 +99,10 @@ class ExaBackend(Backend):
     )
 
     BASE_URL: str = "https://api.exa.ai"
+    allowed_domains: set[str] | None = chz.field(
+        doc="Set of allowed domains. If provided, only URLs from these domains will be fetched.",
+        default=None,
+    )
 
     def _get_api_key(self) -> str:
         key = self.api_key or os.environ.get("EXA_API_KEY")
@@ -149,6 +153,12 @@ class ExaBackend(Backend):
         is_view_source = url.startswith(VIEW_SOURCE_PREFIX)
         if is_view_source:
             url = url[len(VIEW_SOURCE_PREFIX) :]
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"}:
+            raise BackendError(f"Unsupported URL scheme: {parsed.scheme or 'none'}")
+        domain = get_domain(url)
+        if self.allowed_domains is not None and domain not in self.allowed_domains:
+            raise BackendError(f"Domain '{domain}' not allowed")
         data = await self._post(
             session,
             "/contents",
