@@ -39,10 +39,18 @@ class StrategicMemory:
     interacciones o episodios que se pueden consultar posteriormente.
     """
 
-    def __init__(self) -> None:
-        """Inicializa las estructuras de almacenamiento internas."""
+    def __init__(self, max_episodes: int | None = None) -> None:
+        """Inicializa las estructuras de almacenamiento internas.
+
+        Parameters
+        ----------
+        max_episodes:
+            Número máximo de episodios a conservar. Si es ``None``,
+            la cantidad de episodios es ilimitada.
+        """
         self._storage: Dict[str, Any] = {}
         self._episodes: List[Episode] = []
+        self._max_episodes = max_episodes
 
     def save(self, key: str, value: Any) -> None:
         """Guarda una nueva entrada en la memoria.
@@ -109,6 +117,9 @@ class StrategicMemory:
             del episodio a almacenar.
         """
 
+        if self._max_episodes is not None:
+            while len(self._episodes) >= self._max_episodes:
+                self._episodes.pop(0)
         self._episodes.append(data)
 
     def query(self, pattern: Dict[str, Any]) -> List[Episode]:

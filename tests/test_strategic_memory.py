@@ -94,3 +94,33 @@ def test_add_episode_query_and_summarize_multiple():
     assert resumen["total"] == 2
     assert ("alpha", 1) in resumen["actions"]
     assert ("fail", 1) in resumen["outcomes"]
+
+
+def test_max_episodes_fifo():
+    memoria = StrategicMemory(max_episodes=2)
+    ep1 = Episode(
+        timestamp=datetime.utcnow(),
+        input="i1",
+        action="a1",
+        outcome="o1",
+    )
+    ep2 = Episode(
+        timestamp=datetime.utcnow(),
+        input="i2",
+        action="a2",
+        outcome="o2",
+    )
+    ep3 = Episode(
+        timestamp=datetime.utcnow(),
+        input="i3",
+        action="a3",
+        outcome="o3",
+    )
+    memoria.add_episode(ep1)
+    memoria.add_episode(ep2)
+    memoria.add_episode(ep3)
+
+    assert memoria.query({"action": "a1"}) == []
+    assert memoria.query({"action": "a2"}) == [ep2]
+    assert memoria.query({"action": "a3"}) == [ep3]
+    assert memoria.summarize()["total"] == 2
