@@ -35,49 +35,53 @@ def call_python_script(script: str) -> str:
     destroyed after execution. Long running scripts are aborted after
     ``_EXEC_TIMEOUT`` seconds.
     """
-    global _docker_client
-    if _docker_client is None:
-        _docker_client = docker.from_env()
-        # pull image `python:3.11` if not present
-        try:
-            _docker_client.images.get("python:3.11")
-        except docker.errors.ImageNotFound:
-            _docker_client.images.pull("python:3.11")
-
-    # 1. Create a temporary tar archive containing the script
-    script_name = "script.py"
-    tarstream = io.BytesIO()
-    with tarfile.open(fileobj=tarstream, mode="w") as tar:
-        script_bytes = script.encode("utf-8")
-        tarinfo = tarfile.TarInfo(name=script_name)
-        tarinfo.size = len(script_bytes)
-        tar.addfile(tarinfo, io.BytesIO(script_bytes))
-    tarstream.seek(0)
-
-    # 2. Start the container with resource limits
-    container = _docker_client.containers.create(
-        "python:3.11",
-        command="sleep infinity",
-        detach=True,
-        mem_limit=_MEM_LIMIT,
-        nano_cpus=int(_CPU_LIMIT * 1e9),
-        pids_limit=_PIDS_LIMIT,
-    )
     try:
-        container.start()
-        # 3. Put the script into the container
-        container.put_archive(path="/tmp", data=tarstream.read())
-        # 4. Execute the script with a timeout
+        global _docker_client
+        if _docker_client is None:
+            _docker_client = docker.from_env()
+            # pull image `python:3.11` if not present
+            try:
+                _docker_client.images.get("python:3.11")
+            except docker.errors.ImageNotFound:
+                _docker_client.images.pull("python:3.11")
+
+        # 1. Create a temporary tar archive containing the script
+        script_name = "script.py"
+        tarstream = io.BytesIO()
+        with tarfile.open(fileobj=tarstream, mode="w") as tar:
+            script_bytes = script.encode("utf-8")
+            tarinfo = tarfile.TarInfo(name=script_name)
+            tarinfo.size = len(script_bytes)
+            tar.addfile(tarinfo, io.BytesIO(script_bytes))
+        tarstream.seek(0)
+
+        # 2. Start the container with resource limits
+        container = _docker_client.containers.create(
+            "python:3.11",
+            command="sleep infinity",
+            detach=True,
+            mem_limit=_MEM_LIMIT,
+            nano_cpus=int(_CPU_LIMIT * 1e9),
+            pids_limit=_PIDS_LIMIT,
+            network_disabled=True,
+        )
         try:
-            exec_result = container.exec_run(
-                f"python /tmp/{script_name}", timeout=_EXEC_TIMEOUT
-            )
-            output = exec_result.output.decode("utf-8")
-        except requests.exceptions.ReadTimeout:
-            output = "Execution timed out"
-    finally:
-        container.remove(force=True)
-    return output
+            container.start()
+            # 3. Put the script into the container
+            container.put_archive(path="/tmp", data=tarstream.read())
+            # 4. Execute the script with a timeout
+            try:
+                exec_result = container.exec_run(
+                    f"python /tmp/{script_name}", timeout=_EXEC_TIMEOUT
+                )
+                output = exec_result.output.decode("utf-8")
+            except requests.exceptions.ReadTimeout:
+                output = "Execution timed out"
+        finally:
+            container.remove(force=True)
+        return output
+    except Exception:
+        return "Docker execution failed"
 
 
 class PythonTool(Tool):
