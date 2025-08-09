@@ -6,7 +6,7 @@ from openai_harmony import (
     Author,
     Role,
     Message,
-    TextContent,
+    SystemError,
 )
 
 
@@ -63,13 +63,17 @@ class Tool(ABC):
         """
         async for m in self._process(message):
             if self.output_channel_should_match_input_channel:
-                _maybe_update_inplace_and_validate_channel(input_message=message, tool_message=m)
+                _maybe_update_inplace_and_validate_channel(
+                    input_message=message, tool_message=m
+                )
             yield m
 
     @abstractmethod
     async def _process(self, message: Message) -> AsyncIterator[Message]:
         """Override this method to provide the implementation of the tool."""
-        if False:  # This is to convince the type checker that this is an async generator.
+        if (
+            False
+        ):  # This is to convince the type checker that this is an async generator.
             yield  # type: ignore[unreachable]
         _ = message  # Stifle "unused argument" warning.
         raise NotImplementedError
@@ -89,12 +93,14 @@ class Tool(ABC):
         self, error_message: str, id: UUID | None = None, channel: str | None = None
     ) -> Message:
         """
-        Return an error message that's from this tool.
+        Return an error message emitted by this tool.
+
+        The returned message's content is a ``SystemError`` containing the
+        provided text, indicating to the assistant that an error occurred.
         """
         return Message(
             id=id if id else uuid4(),
             author=Author(role=Role.TOOL, name=self.name),
-            content=TextContent(text=error_message), # TODO: Use SystemError instead
+            content=SystemError(message=error_message),
             channel=channel,
         ).with_recipient("assistant")
-
