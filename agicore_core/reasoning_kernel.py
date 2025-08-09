@@ -7,12 +7,15 @@ import time
 from datetime import datetime
 import ast
 import operator as op
+import logging
 
 from meta_router import MetaRouter
 from gpt_oss.strategic_memory import Episode, StrategicMemory
 
 from .planner import Planner
 from .meta_evaluator import MetaEvaluator
+
+logger = logging.getLogger(__name__)
 
 
 _BIN_OPS = {
@@ -319,21 +322,31 @@ class ReasoningKernel:
             except Exception as exc:  # pragma: no cover - planificación fallida
                 self.history.append({"error": str(exc)})
                 return self._state
+            if isinstance(plan, dict):
+                if "token" in plan:
+                    token = plan["token"]
+                    metas = {k: v for k, v in plan.items() if k != "token"}
+                    self.start_token_cycle(token, metas)
+                    for _ in range(max_iterations):
+                        if self.continue_token_cycle() is None:
+                            break
+                    if self.evaluator is not None:
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        if sugerencia:
+                            self._state.update(sugerencia)
+                            if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                                self.planner.aplicar_sugerencias(sugerencia)
+                        self.evaluator.reflexionar(self.history)
+                    return self._state
+                error_msg = "Plan dict sin 'token'"
+                logger.error(error_msg)
+                self.history.append({"error": error_msg})
+                return self._state
 
-            if isinstance(plan, dict) and "token" in plan:
-                token = plan["token"]
-                metas = {k: v for k, v in plan.items() if k != "token"}
-                self.start_token_cycle(token, metas)
-                for _ in range(max_iterations):
-                    if self.continue_token_cycle() is None:
-                        break
-                if self.evaluator is not None:
-                    sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
-                    if sugerencia:
-                        self._state.update(sugerencia)
-                        if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
-                            self.planner.aplicar_sugerencias(sugerencia)
-                    self.evaluator.reflexionar(self.history)
+            if not isinstance(plan, (list, tuple)):
+                error_msg = f"Tipo de plan inesperado: {type(plan).__name__}"
+                logger.error(error_msg)
+                self.history.append({"error": error_msg})
                 return self._state
 
             for step in plan:
