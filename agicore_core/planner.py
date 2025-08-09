@@ -58,8 +58,11 @@ class Planner:
             Lista de respuestas proporcionadas por los clientes del
             orquestador.
         """
-
-        return self.orchestrator.broadcast_state(state)
+        try:
+            return self.orchestrator.broadcast_state(state)
+        except Exception:  # pragma: no cover - logging side effect
+            logger.exception("Error al difundir el estado")
+            return []
 
     def aplicar_sugerencias(self, sugerencias: Dict[str, Any]) -> None:
         """Ajusta el perfil del planificador según recomendaciones externas."""
