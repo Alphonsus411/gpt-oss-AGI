@@ -17,6 +17,14 @@ class DummyModule:
         return "ok"
 
 
+def test_register_duplicate_name_raises_error():
+    router = MetaRouter()
+    dummy = DummyModule()
+    router.register("dup", dummy, tasks=["t"], contexts=["c"], goals=["g"])
+    with pytest.raises(ValueError):
+        router.register("dup", dummy, tasks=["t"], contexts=["c"], goals=["g"])
+
+
 def test_routes_to_custom_module():
     router = MetaRouter()
     dummy = DummyModule()

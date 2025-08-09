@@ -67,6 +67,8 @@ class MetaRouter:
         priority: int = 0,
     ) -> None:
         """Registra un nuevo ``module`` bajo ``name`` con metadatos opcionales."""
+        if name in self._experts:
+            raise ValueError(f"El nombre '{name}' ya está registrado")
 
         self._experts[name] = Expert(
             module=module,
