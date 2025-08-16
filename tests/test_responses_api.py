@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from openai_harmony import (
     HarmonyEncodingName,
+    Role,
     load_harmony_encoding,
 )
 
@@ -49,3 +50,28 @@ def test_health_check(test_client):
     )
     print(response.json())
     assert response.status_code == 200
+
+
+def test_system_message_in_input_reflected(test_client, monkeypatch):
+    captured = {}
+
+    original_render = encoding.render_conversation_for_completion
+
+    def capture(conv, role):
+        captured["messages"] = conv.messages
+        return original_render(conv, role)
+
+    monkeypatch.setattr(encoding, "render_conversation_for_completion", capture)
+
+    response = test_client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-oss-120b",
+            "input": [
+                {"type": "message", "role": "system", "content": "sys msg"},
+                {"type": "message", "role": "user", "content": "hi"},
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert captured["messages"][0].to_dict()["role"] == Role.SYSTEM
