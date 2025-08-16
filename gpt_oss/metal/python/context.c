@@ -28,7 +28,7 @@ static int PyGPTOSSContext_init(PyGPTOSSContext* self, PyObject* args, PyObject*
         (size_t) context_length,
         &self->handle);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_context_create failed");
         goto error;
     }
 
@@ -68,7 +68,7 @@ static PyObject* PyGPTOSSContext_append(PyGPTOSSContext* self, PyObject* arg) {
         const enum gptoss_status status = gptoss_context_append_chars(
             self->handle, string_ptr, string_size, /*num_tokens_out=*/NULL);
         if (status != gptoss_status_success) {
-            // TODO: set exception
+            PyErr_SetString(PyExc_RuntimeError, "gptoss_context_append_chars failed");
             return NULL;
         }
 
@@ -83,7 +83,7 @@ static PyObject* PyGPTOSSContext_append(PyGPTOSSContext* self, PyObject* arg) {
         const enum gptoss_status status = gptoss_context_append_chars(
             self->handle, string_ptr, string_size, /*num_tokens_out=*/NULL);
         if (status != gptoss_status_success) {
-            // TODO: set exception
+            PyErr_SetString(PyExc_RuntimeError, "gptoss_context_append_chars failed");
             return NULL;
         }
 
@@ -98,7 +98,7 @@ static PyObject* PyGPTOSSContext_append(PyGPTOSSContext* self, PyObject* arg) {
         const enum gptoss_status status = gptoss_context_append_tokens(
             self->handle, /*num_tokens=*/1, &token);
         if (status != gptoss_status_success) {
-            // TODO: set exception
+            PyErr_SetString(PyExc_RuntimeError, "gptoss_context_append_tokens failed");
             return NULL;
         }
 
@@ -112,7 +112,7 @@ static PyObject* PyGPTOSSContext_append(PyGPTOSSContext* self, PyObject* arg) {
 static PyObject* PyGPTOSSContext_process(PyGPTOSSContext* self) {
     const enum gptoss_status status = gptoss_context_process(self->handle);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_context_process failed");
         return NULL;
     }
 
@@ -134,7 +134,7 @@ static PyObject* PyGPTOSSContext_sample(PyGPTOSSContext* self, PyObject* args, P
     enum gptoss_status status = gptoss_context_sample(
         self->handle, temperature, (uint64_t) seed, &token_out);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_context_sample failed");
         return NULL;
     }
 
@@ -144,7 +144,7 @@ static PyObject* PyGPTOSSContext_sample(PyGPTOSSContext* self, PyObject* args, P
 static PyObject* PyGPTOSSContext_reset(PyGPTOSSContext* self) {
     const enum gptoss_status status = gptoss_context_reset(self->handle);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_context_reset failed");
         return NULL;
     }
 
@@ -164,7 +164,7 @@ static PyObject* PyGPTOSSContext_get_num_tokens(PyGPTOSSContext* self, void* clo
     size_t num_tokens = 0;
     const enum gptoss_status status = gptoss_context_get_num_tokens(self->handle, &num_tokens);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_context_get_num_tokens failed");
         return NULL;
     }
 
@@ -175,7 +175,7 @@ static PyObject* PyGPTOSSContext_get_max_tokens(PyGPTOSSContext* self, void* clo
     size_t max_tokens = 0;
     const enum gptoss_status status = gptoss_context_get_max_tokens(self->handle, &max_tokens);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_context_get_max_tokens failed");
         return NULL;
     }
 
@@ -193,13 +193,13 @@ static PyObject* PyGPTOSSContext_get_tokens(PyGPTOSSContext* self, void* closure
     if (num_tokens != 0) {
         token_ptr = (uint32_t*) PyMem_Malloc(num_tokens * sizeof(uint32_t));
         if (token_ptr == NULL) {
-            // TODO: set exception
+            PyErr_NoMemory();
             goto error;
         }
 
         enum gptoss_status status = gptoss_context_get_tokens(self->handle, token_ptr, /*max_tokens=*/num_tokens, &num_tokens);
         if (status != gptoss_status_success) {
-            // TODO: set exception
+            PyErr_SetString(PyExc_RuntimeError, "gptoss_context_get_tokens failed");
             goto error;
         }
     }
