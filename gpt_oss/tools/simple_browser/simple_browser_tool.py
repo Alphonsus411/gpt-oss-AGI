@@ -35,8 +35,9 @@ from .page_contents import Extract, PageContents
 logger = structlog.stdlib.get_logger(component=__name__)
 
 
-# TODO(zhuohan): Use the correct encoding at release
-ENC_NAME = "o200k_base"
+# Encoding required by GPT-4.1 models. Retrieved via
+# ``tiktoken.encoding_for_model``: https://github.com/openai/tiktoken
+ENC_NAME = tiktoken.encoding_for_model("gpt-4.1-mini").name
 FIND_PAGE_LINK_FORMAT = "# 【{idx}†{title}】"
 PARTIAL_INITIAL_LINK_PATTERN = re.compile(r"^[^【】]*】")
 PARTIAL_FINAL_LINK_PATTERN = re.compile(
@@ -75,7 +76,7 @@ def function_the_model_can_call(
 
 
 @functools.cache
-def _tiktoken_vocabulary_lengths(enc_name: str) -> list[int]:
+def _tiktoken_vocabulary_lengths(enc_name: str = ENC_NAME) -> list[int]:
     encoding = tiktoken.get_encoding(enc_name)
     results = []
     for i in range(encoding.n_vocab):
@@ -93,13 +94,13 @@ class Tokens:
 
 
 @functools.cache
-def max_chars_per_token(enc_name: str) -> int:
+def max_chars_per_token(enc_name: str = ENC_NAME) -> int:
     """Typical value is 128, but let's be safe."""
     tok_lens = _tiktoken_vocabulary_lengths(enc_name)
     return max(tok_lens)
 
 
-def get_tokens(text: str, enc_name: str) -> Tokens:
+def get_tokens(text: str, enc_name: str = ENC_NAME) -> Tokens:
     encoding = tiktoken.get_encoding(enc_name)
     tokens = encoding.encode(text, disallowed_special=())
     _vocabulary_lenghts = _tiktoken_vocabulary_lengths(enc_name)
@@ -116,7 +117,7 @@ def get_end_loc(
     total_lines: int,
     lines: list[str],
     view_tokens: int,
-    encoding_name: str,
+    encoding_name: str = ENC_NAME,
 ) -> int:
     if num_lines <= 0:
         # COMPUTE NUMBER OF LINES TO SHOW
