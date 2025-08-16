@@ -14,7 +14,7 @@ static int PyGPTOSSModel_init(PyGPTOSSModel* self, PyObject* args, PyObject* kwa
     }
     status = gptoss_model_create_from_file(filepath, &self->handle);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_model_create_from_file failed");
         return -1;
     }
     return 0;
@@ -46,7 +46,7 @@ static PyObject *PyGPTOSSModel_get_max_context_length(PyGPTOSSModel* self, void*
     size_t max_context_length = 0;
     const enum gptoss_status status = gptoss_model_get_max_context_length(self->handle, &max_context_length);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_model_get_max_context_length failed");
         return NULL;
     }
 

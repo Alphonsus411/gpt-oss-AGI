@@ -20,7 +20,10 @@ static PyObject* PyGPTOSSTokenizer_new(PyTypeObject* subtype, PyObject* args, Py
         ((const PyGPTOSSModel*) model)->handle,
         &self->handle);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_model_get_tokenizer failed");
+        gptoss_tokenizer_release(self->handle);
+        self->handle = NULL;
+        Py_DECREF(self);
         return NULL;
     }
 
@@ -104,7 +107,7 @@ static PyObject* PyGPTOSSTokenizer_decode(PyGPTOSSTokenizer* self, PyObject* arg
     size_t token_size = 0;
     const enum gptoss_status status = gptoss_tokenizer_decode(self->handle, (uint32_t) token, &token_ptr, &token_size);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_tokenizer_decode failed");
         return NULL;
     }
 
@@ -122,7 +125,7 @@ static PyObject* PyGPTOSSTokenizer_get_num_text_tokens(PyGPTOSSTokenizer* self, 
     uint32_t num_text_tokens = 0;
     const enum gptoss_status status = gptoss_tokenizer_get_num_text_tokens(self->handle, &num_text_tokens);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_tokenizer_get_num_text_tokens failed");
         return NULL;
     }
 
@@ -133,7 +136,7 @@ static PyObject* PyGPTOSSTokenizer_get_num_special_tokens(PyGPTOSSTokenizer* sel
     uint32_t num_special_tokens = 0;
     const enum gptoss_status status = gptoss_tokenizer_get_num_special_tokens(self->handle, &num_special_tokens);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_tokenizer_get_num_special_tokens failed");
         return NULL;
     }
 
@@ -144,7 +147,7 @@ static PyObject* PyGPTOSSTokenizer_get_num_tokens(PyGPTOSSTokenizer* self, void*
     uint32_t num_tokens = 0;
     const enum gptoss_status status = gptoss_tokenizer_get_num_tokens(self->handle, &num_tokens);
     if (status != gptoss_status_success) {
-        // TODO: set exception
+        PyErr_SetString(PyExc_RuntimeError, "gptoss_tokenizer_get_num_tokens failed");
         return NULL;
     }
 
