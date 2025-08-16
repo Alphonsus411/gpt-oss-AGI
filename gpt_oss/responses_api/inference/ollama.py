@@ -13,7 +13,11 @@ import requests
 
 from openai_harmony import load_harmony_encoding, HarmonyEncodingName
 
-EOS_TOKEN = 200002  # only used on hard timeout
+EOS_TOKEN = 200002  # emitted on hard timeout
+# Sentinel value returned when no real token is available. The server must
+# ignore this token and continue polling until a valid token or EOS is
+# produced.
+PAD_TOKEN = 0
 
 # Tunables
 POLL_INTERVAL_S = 0.01           # 10ms between buffer checks
@@ -187,9 +191,9 @@ class OllamaStreamer:
             return EOS_TOKEN
 
         # If we reach here, we still haven't got a token—ask the caller to call again soon.
-        # Return a harmless token that the server will replace/ignore if your interface supports it.
-        # If your interface does NOT allow a sentinel, keep the short-blocking behavior above.
-        return EOS_TOKEN if False else 0  # replace `0` with a PAD/NOOP token your server ignores
+        # We signal "no token yet" by returning PAD_TOKEN; the server is expected to drop
+        # this value and continue polling until a real token or EOS is produced.
+        return PAD_TOKEN
 
 
 def setup_model(checkpoint: str, endpoint_url: Optional[str] = None) -> Callable[[list[int], float, bool], int]:

@@ -2,10 +2,11 @@ import json as json_module
 import threading
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from gpt_oss.responses_api.inference.ollama import setup_model, EOS_TOKEN
+from gpt_oss.responses_api.inference.ollama import setup_model, EOS_TOKEN, PAD_TOKEN
 
 
 class DummyEncoding:
@@ -104,3 +105,30 @@ def test_env_url(monkeypatch):
     tok = infer([1], 0.0, new_request=True)
     assert captured["url"] == "https://env.example/api/generate"
     assert tok == ord("X")
+
+
+def test_pad_token_on_no_output(monkeypatch):
+    """Si no hay tokens disponibles, la inferencia debe devolver PAD_TOKEN."""
+
+    monkeypatch.setattr(
+        "gpt_oss.responses_api.inference.ollama.load_harmony_encoding",
+        fake_load_harmony_encoding,
+    )
+
+    # Evitar esperas en la prueba
+    monkeypatch.setattr(
+        "gpt_oss.responses_api.inference.ollama.CALL_MAX_WAIT_S", 0, raising=False
+    )
+    monkeypatch.setattr(
+        "gpt_oss.responses_api.inference.ollama.POLL_INTERVAL_S", 0, raising=False
+    )
+    monkeypatch.setattr(
+        "gpt_oss.responses_api.inference.ollama.time.sleep", lambda *a, **k: None
+    )
+
+    infer = setup_model("model")
+    # Simular que el streamer está activo recientemente para evitar tiempo de espera de EOS
+    infer.__self__._last_progress_ts = time.monotonic()
+
+    tok = infer([], 0.0)
+    assert tok == PAD_TOKEN
