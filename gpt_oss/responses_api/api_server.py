@@ -838,7 +838,21 @@ def create_api_server(
 
             for idx, item in enumerate(body.input):
                 if item.type == "message":
-                    # TODO: add system prompt handling
+                    if item.role == Role.SYSTEM:
+                        if isinstance(item.content, str):
+                            messages.insert(
+                                0,
+                                Message.from_role_and_content(Role.SYSTEM, item.content),
+                            )
+                        else:
+                            for content_item in item.content:
+                                messages.insert(
+                                    0,
+                                    Message.from_role_and_content(
+                                        Role.SYSTEM, content_item.text
+                                    ),
+                                )
+                        continue
                     if isinstance(item.content, str):
                         messages.append(
                             Message.from_role_and_content(item.role, item.content)
