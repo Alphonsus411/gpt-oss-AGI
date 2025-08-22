@@ -4,14 +4,13 @@
 
 Esta es una lista de guías y recursos para ayudarte a comenzar con los modelos gpt-oss.
 
-- [Inferencia](#inference)
+- [Inferencia](#inferencia)
   - [Local](#local)
-  - [Servidor](#server)
-  - [Nube](#cloud)
-- [Ejemplos / Tutoriales](#examples--tutorials)
-- [Herramientas](#tools)
+  - [Servidor](#servidor)
+  - [Nube](#nube)
+- [Ejemplos / Tutoriales](#ejemplos-y-tutoriales)
+- [Herramientas](#herramientas)
 
-<a id="inference"></a>
 ## Inferencia
 
 ### Local
@@ -33,7 +32,6 @@ Esta es una lista de guías y recursos para ayudarte a comenzar con los modelos 
 - AMD
   - [Ejecución de modelos gpt-oss en procesadores AMD Ryzen AI y tarjetas gráficas Radeon](https://www.amd.com/en/blogs/2025/how-to-run-openai-gpt-oss-20b-120b-models-on-amd-ryzen-ai-radeon.html)
 
-<a id="server"></a>
 ### Servidor
 
 - vLLM
@@ -44,7 +42,6 @@ Esta es una lista de guías y recursos para ayudarte a comenzar con los modelos 
 - AMD
   - [Ejecutar los últimos modelos abiertos de OpenAI en hardware de IA de AMD](https://rocm.blogs.amd.com/ecosystems-and-partners/openai-day-0/README.html)
 
-<a id="cloud"></a>
 ### Nube
 
 - Groq
@@ -65,12 +62,10 @@ Esta es una lista de guías y recursos para ayudarte a comenzar con los modelos 
 - AMD
   - [gpt-oss-120B en AMD MI300X](https://huggingface.co/spaces/amd/gpt-oss-120b-chatbot)
 
-<a id="examples--tutorials"></a>
 ## Ejemplos y tutoriales
 
 - [Formato de respuesta de OpenAI harmony](https://cookbook.openai.com/articles/openai-harmony)
 
-<a id="tools"></a>
 ## Herramientas
 
 - [Ejemplo de herramienta `python` para gpt-oss](./gpt_oss/tools/python_docker/)
