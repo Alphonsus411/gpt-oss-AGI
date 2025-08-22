@@ -1,29 +1,29 @@
-# MCP Servers for gpt-oss reference tools
+# Servidores MCP para herramientas de referencia de gpt-oss
 
-This directory contains MCP servers for the reference tools in the [gpt-oss](https://github.com/openai/gpt-oss) repository.
-You can set up these tools behind MCP servers and use them in your applications. 
-For inference service that integrates with MCP, you can also use these as reference tools. 
+Este directorio contiene servidores MCP para las herramientas de referencia en el repositorio [gpt-oss](https://github.com/openai/gpt-oss).
+Puedes configurar estas herramientas detrás de servidores MCP y usarlas en tus aplicaciones.
+Para servicios de inferencia que se integren con MCP, también puedes utilizarlas como herramientas de referencia.
 
-In particular, this directory contains a `build-system-prompt.py` script that will generate exactly the same system prompt as `reference-system-prompt.py`.
-The build system prompt script show case all the care needed to automatically discover the tools and construct the system prompt before feeding it into Harmony.
+En particular, este directorio contiene un script `build-system-prompt.py` que generará exactamente el mismo prompt del sistema que `reference-system-prompt.py`.
+El script del prompt del sistema muestra todas las precauciones necesarias para descubrir automáticamente las herramientas y construir el prompt del sistema antes de enviarlo a Harmony.
 
-## Usage
+## Uso
 
 ```bash
-# Install the dependencies
+# Instala las dependencias
 uv pip install -r requirements.txt
 ```
 
 ```bash
-# Assume we have harmony and gpt-oss installed
+# Asumimos que harmony y gpt-oss están instalados
 uv pip install mcp[cli]
-# start the servers
+# iniciar los servidores
 mcp run -t sse browser_server.py:mcp
 mcp run -t sse python_server.py:mcp
 ```
 
-You can now use MCP inspector to play with the tools. 
-Once opened, set SSE to `http://localhost:8001/sse` and `http://localhost:8000/sse` respectively.
+Ahora puedes utilizar MCP inspector para experimentar con las herramientas.
+Una vez abierto, establece SSE en `http://localhost:8001/sse` y `http://localhost:8000/sse` respectivamente.
 
-To compare the system prompt and see how to construct it via MCP service discovery, see `build-system-prompt.py`. 
-This script will generate exactly the same system prompt as `reference-system-prompt.py`.
+Para comparar el prompt del sistema y ver cómo construirlo mediante el descubrimiento de servicios MCP, consulta `build-system-prompt.py`.
+Este script generará exactamente el mismo prompt del sistema que `reference-system-prompt.py`.
