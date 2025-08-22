@@ -64,6 +64,11 @@ def call_python_script(script: str) -> str:
             nano_cpus=int(_CPU_LIMIT * 1e9),
             pids_limit=_PIDS_LIMIT,
             network_disabled=True,
+            user="nobody",
+            read_only=True,
+            security_opt=["no-new-privileges"],
+            cap_drop=["ALL"],
+            tmpfs={"/tmp": ""},
         )
         try:
             container.start()
