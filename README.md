@@ -67,4 +67,8 @@ Para información sobre vLLM, PyTorch/Triton/Metal, Ollama, LM Studio y otros te
 
 Visita también la lista [awesome-gpt-oss](awesome-gpt-oss.es.md) para encontrar herramientas y proyectos de la comunidad.
 
+### Licencia
+
+Este proyecto se distribuye bajo la Licencia Apache 2.0. Puedes encontrar el texto original en `LICENSE` y una traducción al español en `LICENSE.es`.
+
 [harmony]: https://github.com/openai/harmony
