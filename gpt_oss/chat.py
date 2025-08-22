@@ -1,5 +1,5 @@
 """
-Harmony chat with tools.
+Chat de Harmony con herramientas.
 
 Incluye integración con :class:`Planner` para consultar metas y modos del agente.
 """
