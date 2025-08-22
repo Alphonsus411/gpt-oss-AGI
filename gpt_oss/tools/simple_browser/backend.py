@@ -100,9 +100,9 @@ class ExaBackend(Backend):
     )
 
     BASE_URL: str = "https://api.exa.ai"
-    allowed_domains: set[str] | None = chz.field(
-        doc="Set of allowed domains. If provided, only URLs from these domains will be fetched.",
-        default=None,
+    allowed_domains: set[str] = chz.field(
+        doc="Set of allowed domains. Only URLs from these domains will be fetched.",
+        default_factory=set,
     )
     timeout: float = chz.field(
         doc="Timeout for HTTP requests in seconds.",
@@ -116,6 +116,11 @@ class ExaBackend(Backend):
         doc="Maximum wait time between retries in seconds.",
         default=60.0,
     )
+
+    @chz.validate
+    def _validate_allowed_domains(self) -> None:
+        if not self.allowed_domains:
+            raise BackendError("allowed_domains must be provided")
 
     def _get_api_key(self) -> str:
         key = self.api_key or os.environ.get("EXA_API_KEY")

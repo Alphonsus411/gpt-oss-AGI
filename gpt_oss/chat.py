@@ -22,6 +22,8 @@ import termcolor
 from gpt_oss.tools import apply_patch
 from gpt_oss.tools.simple_browser import SimpleBrowserTool
 from gpt_oss.tools.simple_browser.backend import ExaBackend
+
+SAFE_DOMAINS = {"openai.com"}
 from gpt_oss.tools.python_docker.docker_tool import PythonTool
 from gpt_oss.planner import Planner  # Gestiona metas y modos del agente
 
@@ -92,6 +94,7 @@ def main(args):
     if args.browser:
         backend = ExaBackend(
             source="web",
+            allowed_domains=SAFE_DOMAINS,
         )
         browser_tool = SimpleBrowserTool(backend=backend)
         system_message_content = system_message_content.with_tools(browser_tool.tool_config)
