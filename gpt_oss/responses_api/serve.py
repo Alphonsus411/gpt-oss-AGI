@@ -1,4 +1,4 @@
-# torchrun --nproc-per-node=4 serve.py
+# Ejemplo: torchrun --nproc-per-node=4 serve.py
 
 import argparse
 
@@ -11,27 +11,27 @@ from openai_harmony import (
 from .api_server import create_api_server
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Responses API server")
+    parser = argparse.ArgumentParser(description="Servidor de API de respuestas")
     parser.add_argument(
         "--checkpoint",
-        metavar="FILE",
+        metavar="ARCHIVO",
         type=str,
-        help="Path to the SafeTensors checkpoint",
+        help="Ruta al checkpoint de SafeTensors",
         default="~/model",
         required=False,
     )
     parser.add_argument(
         "--port",
-        metavar="PORT",
+        metavar="PUERTO",
         type=int,
         default=8000,
-        help="Port to run the server on",
+        help="Puerto para ejecutar el servidor",
     )
     parser.add_argument(
         "--inference-backend",
         metavar="BACKEND",
         type=str,
-        help="Inference backend to use",
+        help="Backend de inferencia a utilizar",
         # default to metal on macOS, triton on other platforms
         default="metal" if __import__("platform").system() == "Darwin" else "triton",
     )
