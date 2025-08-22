@@ -42,7 +42,7 @@ class Planner:
     def set_intention(self, intent: str) -> None:
         """Define la intención global del agente.
 
-        Parameters
+        Parámetros
         ----------
         intent:
             Descripción de la intención u objetivo general.
@@ -56,7 +56,7 @@ class Planner:
         Las metas se gestionan internamente con una cola de prioridad para
         facilitar la extracción de la próxima meta más importante.
 
-        Parameters
+        Parámetros
         ----------
         goal:
             Descripción de la meta a añadir.
@@ -64,7 +64,7 @@ class Planner:
             Valor numérico que indica la importancia de la meta. Valores más
             altos representan mayor prioridad.
 
-        Raises
+        Errores
         ------
         ValueError
             Si ``prioridad`` es negativa.
@@ -80,7 +80,7 @@ class Planner:
     def get_next_goal(self) -> Optional[str]:
         """Obtiene la siguiente meta con mayor prioridad.
 
-        Returns
+        Devuelve
         -------
         str or None
             La descripción de la meta más prioritaria o ``None`` si no hay
@@ -95,7 +95,7 @@ class Planner:
     def list_goals(self) -> List[str]:
         """Devuelve las metas ordenadas por prioridad sin modificarlas.
 
-        Returns
+        Devuelve
         -------
         List[str]
             Lista de metas pendientes de alcanzar, ordenadas de la más a la
@@ -117,13 +117,13 @@ class Planner:
         mismo modo para ajustar parámetros como la temperatura en función de los
         resultados observados.
 
-        Parameters
+        Parámetros
         ----------
         tipo:
             Cadena que identifica el modo a activar. Los valores aceptados son
             ``"creative"``, ``"analytic"`` y ``"deductive"``.
 
-        Raises
+        Errores
         ------
         ValueError
             Si el modo solicitado no está soportado.
@@ -162,7 +162,7 @@ class Planner:
         El episodio incluye el modo activo y sus parámetros para que futuras
         activaciones puedan ajustar dichos valores según el desempeño previo.
 
-        Parameters
+        Parámetros
         ----------
         entrada:
             Información de entrada procesada.
@@ -194,7 +194,7 @@ class Planner:
     def get_mode_parameters(self) -> Dict[str, Any]:
         """Obtiene los parámetros asociados al modo activo.
 
-        Returns
+        Devuelve
         -------
         Dict[str, Any]
             Diccionario con los parámetros del modo actual (vacío si no hay

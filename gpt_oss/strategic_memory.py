@@ -42,7 +42,7 @@ class StrategicMemory:
     def __init__(self, max_episodes: int | None = None) -> None:
         """Inicializa las estructuras de almacenamiento internas.
 
-        Parameters
+        Parámetros
         ----------
         max_episodes:
             Número máximo de episodios a conservar. Si es ``None``,
@@ -55,14 +55,14 @@ class StrategicMemory:
     def save(self, key: str, value: Any) -> None:
         """Guarda una nueva entrada en la memoria.
 
-        Parameters
+        Parámetros
         ----------
         key:
             Clave con la que se identificará la entrada.
         value:
             Valor asociado a la clave.
 
-        Raises
+        Errores
         ------
         ValueError
             Si la clave ya existe en la memoria.
@@ -74,14 +74,14 @@ class StrategicMemory:
     def get(self, key: str, default: Any | None = None) -> Any:
         """Recupera la entrada asociada a ``key``.
 
-        Parameters
+        Parámetros
         ----------
         key:
             Clave de la entrada a recuperar.
         default:
             Valor por defecto a devolver si la clave no existe.
 
-        Returns
+        Devuelve
         -------
         Any
             El valor asociado a la clave o ``default`` si no se encuentra.
@@ -91,14 +91,14 @@ class StrategicMemory:
     def update(self, key: str, value: Any) -> None:
         """Actualiza una entrada existente en la memoria.
 
-        Parameters
+        Parámetros
         ----------
         key:
             Clave de la entrada a actualizar.
         value:
             Nuevo valor para la entrada.
 
-        Raises
+        Errores
         ------
         KeyError
             Si la clave no existe en la memoria.
@@ -110,7 +110,7 @@ class StrategicMemory:
     def add_episode(self, data: Episode) -> None:
         """Añade un nuevo episodio a la memoria.
 
-        Parameters
+        Parámetros
         ----------
         data:
             Instancia de :class:`Episode` que contiene la información
@@ -128,12 +128,12 @@ class StrategicMemory:
         Cada par clave-valor de ``pattern`` se compara con los atributos
         del episodio y con su metadato homónimo si el atributo no existe.
 
-        Parameters
+        Parámetros
         ----------
         pattern:
             Diccionario con los campos y valores a buscar.
 
-        Returns
+        Devuelve
         -------
         list[Episode]
             Lista de episodios que cumplen con el patrón.
@@ -154,7 +154,7 @@ class StrategicMemory:
     def summarize(self) -> Dict[str, Any]:
         """Obtiene estadísticas generales de los episodios almacenados.
 
-        Returns
+        Devuelve
         -------
         dict
             Diccionario con el total de episodios y las acciones y
