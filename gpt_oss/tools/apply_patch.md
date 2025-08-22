@@ -1,38 +1,38 @@
-When requested to perform coding-related tasks, you MUST adhere to the following criteria when executing the task:
+Cuando se te solicite realizar tareas relacionadas con la codificación, DEBES adherirte a los siguientes criterios al ejecutar la tarea:
 
-- Use `apply_patch` to edit files.
-- If completing the user's task requires writing or modifying files:
-  - Your code and final answer should follow these _CODING GUIDELINES_:
-    - Avoid unneeded complexity in your solution. Minimize program size.
-    - Keep changes consistent with the style of the existing codebase. Changes should be minimal and focused on the task.
-    - NEVER add copyright or license headers unless specifically requested.
-- Never implement function stubs. Provide complete working implementations.
+- Usa `apply_patch` para editar archivos.
+- Si completar la tarea del usuario requiere escribir o modificar archivos:
+  - Tu código y respuesta final deben seguir estas _DIRECTRICES DE CODIFICACIÓN_:
+    - Evita la complejidad innecesaria en tu solución. Minimiza el tamaño del programa.
+    - Mantén los cambios consistentes con el estilo de la base de código existente. Los cambios deben ser mínimos y centrados en la tarea.
+    - NUNCA añadas encabezados de copyright o licencias a menos que se solicite específicamente.
+- Nunca implementes stubs de funciones. Proporciona implementaciones completas y funcionales.
 
-§ `apply_patch` Specification
+§ Especificación de `apply_patch`
 
-Your patch language is a stripped‑down, file‑oriented diff format designed to be easy to parse and safe to apply. You can think of it as a high‑level envelope:
+Tu lenguaje de parche es un formato diff simplificado orientado a archivos, diseñado para ser fácil de analizar y seguro de aplicar. Puedes pensarlo como un sobre de alto nivel:
 
 *** Begin Patch
-[ one or more file sections ]
+[ una o más secciones de archivo ]
 *** End Patch
 
-Within that envelope, you get a sequence of file operations.
-You MUST include a header to specify the action you are taking.
-Each operation starts with one of three headers:
+Dentro de ese sobre, obtienes una secuencia de operaciones sobre archivos.
+DEBES incluir un encabezado para especificar la acción que estás realizando.
+Cada operación comienza con uno de tres encabezados:
 
-*** Add File: <path> - create a new file. Every following line is a + line (the initial contents).
-*** Delete File: <path> - remove an existing file. Nothing follows.
-*** Update File: <path> - patch an existing file in place (optionally with a rename).
+*** Add File: <path> - crea un archivo nuevo. Cada línea siguiente es una línea + (el contenido inicial).
+*** Delete File: <path> - elimina un archivo existente. No le sigue nada.
+*** Update File: <path> - aplica un parche a un archivo existente en su lugar (opcionalmente con un cambio de nombre).
 
-May be immediately followed by *** Move to: <new path> if you want to rename the file.
-Then one or more “hunks”, each introduced by @@ (optionally followed by a hunk header).
-Within a hunk each line starts with:
+Puede ir seguido inmediatamente por *** Move to: <new path> si deseas renombrar el archivo.
+Luego uno o más «hunks», cada uno introducido por @@ (opcionalmente seguido de un encabezado de hunk).
+Dentro de un hunk cada línea comienza con:
 
-- for inserted text,
+- para texto insertado,
 
-* for removed text, or
-  space ( ) for context.
-  At the end of a truncated hunk you can emit *** End of File.
+* para texto eliminado, o
+  espacio ( ) para contexto.
+  Al final de un hunk truncado puedes emitir *** End of File.
 
 Patch := Begin { FileOp } End
 Begin := "*** Begin Patch" NEWLINE
@@ -45,7 +45,7 @@ MoveTo := "*** Move to: " newPath NEWLINE
 Hunk := "@@" [ header ] NEWLINE { HunkLine } [ "*** End of File" NEWLINE ]
 HunkLine := (" " | "-" | "+") text NEWLINE
 
-A full patch can combine several operations:
+Un parche completo puede combinar varias operaciones:
 
 *** Begin Patch
 *** Add File: hello.txt
@@ -58,7 +58,7 @@ A full patch can combine several operations:
 *** Delete File: obsolete.txt
 *** End Patch
 
-It is important to remember:
+Es importante recordar:
 
-- You must include a header with your intended action (Add/Delete/Update)
-- You must prefix new lines with `+` even when creating a new file
+- Debes incluir un encabezado con la acción que pretendes realizar (Add/Delete/Update)
+- Debes anteponer `+` a las líneas nuevas incluso al crear un archivo nuevo
