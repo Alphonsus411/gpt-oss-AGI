@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
 """
-A self-contained **pure-Python 3.9+** utility for applying human-readable
-“pseudo-diff” patch files to a collection of text files.
+Una utilidad independiente escrita en **Python puro 3.9+** para aplicar archivos
+de parche en formato “pseudo-diff” legible por humanos a una colección de
+archivos de texto.
 
-Source: https://cookbook.openai.com/examples/gpt4-1_prompting_guide
+Fuente: https://cookbook.openai.com/examples/gpt4-1_prompting_guide
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from typing import (
 
 
 # --------------------------------------------------------------------------- #
-#  Domain objects
+#  Objetos de dominio
 # --------------------------------------------------------------------------- #
 class ActionType(str, Enum):
     ADD = "add"
@@ -45,10 +46,10 @@ class Commit:
 
 
 # --------------------------------------------------------------------------- #
-#  Exceptions
+#  Excepciones
 # --------------------------------------------------------------------------- #
 class DiffError(ValueError):
-    """Any problem detected while parsing or applying a patch."""
+    """Cualquier problema detectado al analizar o aplicar un parche."""
 
 ROOT = pathlib.Path.cwd().resolve()
 
@@ -67,7 +68,7 @@ def normalize_path(path: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-#  Helper dataclasses used while parsing patches
+#  Clases de datos auxiliares usadas al analizar parches
 # --------------------------------------------------------------------------- #
 @dataclass
 class Chunk:
@@ -90,7 +91,7 @@ class Patch:
 
 
 # --------------------------------------------------------------------------- #
-#  Patch text parser
+#  Analizador de texto de parches
 # --------------------------------------------------------------------------- #
 @dataclass
 class Parser:
@@ -100,7 +101,7 @@ class Parser:
     patch: Patch = field(default_factory=Patch)
     fuzz: int = 0
 
-    # ------------- low-level helpers -------------------------------------- #
+# ------------- funciones auxiliares de bajo nivel -------------------------------------- #
     def _cur_line(self) -> str:
         if self.index >= len(self.lines):
             raise DiffError("Unexpected end of input while parsing patch")
@@ -108,10 +109,10 @@ class Parser:
 
     @staticmethod
     def _norm(line: str) -> str:
-        """Strip CR so comparisons work for both LF and CRLF input."""
+        """Elimina CR para que las comparaciones funcionen tanto con entradas LF como CRLF."""
         return line.rstrip("\r")
 
-    # ------------- scanning convenience ----------------------------------- #
+# ------------- utilidades de escaneo ----------------------------------- #
     def is_done(self, prefixes: Optional[Tuple[str, ...]] = None) -> bool:
         if self.index >= len(self.lines):
             return True
@@ -128,8 +129,8 @@ class Parser:
 
     def read_str(self, prefix: str) -> str:
         """
-        Consume the current line if it starts with *prefix* and return the text
-        **after** the prefix.  Raises if prefix is empty.
+        Consume la línea actual si comienza con *prefix* y devuelve el texto
+        **después** del prefijo. Genera una excepción si el prefijo está vacío.
         """
         if prefix == "":
             raise ValueError("read_str() requires a non-empty prefix")
@@ -140,15 +141,15 @@ class Parser:
         return ""
 
     def read_line(self) -> str:
-        """Return the current raw line and advance."""
+        """Devuelve la línea original actual y avanza."""
         line = self._cur_line()
         self.index += 1
         return line
 
-    # ------------- public entry point -------------------------------------- #
+    # ------------- punto de entrada público -------------------------------------- #
     def parse(self) -> None:
         while not self.is_done(("*** End Patch",)):
-            # ---------- UPDATE ---------- #
+            # ---------- ACTUALIZACIÓN ---------- #
             path = self.read_str("*** Update File: ")
             if path:
                 path = normalize_path(path)
@@ -164,7 +165,7 @@ class Parser:
                 self.patch.actions[path] = action
                 continue
 
-            # ---------- DELETE ---------- #
+            # ---------- ELIMINACIÓN ---------- #
             path = self.read_str("*** Delete File: ")
             if path:
                 path = normalize_path(path)
@@ -175,7 +176,7 @@ class Parser:
                 self.patch.actions[path] = PatchAction(type=ActionType.DELETE)
                 continue
 
-            # ---------- ADD ---------- #
+            # ---------- AÑADIR ---------- #
             path = self.read_str("*** Add File: ")
             if path:
                 path = normalize_path(path)
@@ -190,9 +191,9 @@ class Parser:
 
         if not self.startswith("*** End Patch"):
             raise DiffError("Missing *** End Patch sentinel")
-        self.index += 1  # consume sentinel
+        self.index += 1  # consumir centinela
 
-    # ------------- section parsers ---------------------------------------- #
+    # ------------- analizadores de secciones ---------------------------------------- #
     def _parse_update_file(self, text: str) -> PatchAction:
         action = PatchAction(type=ActionType.UPDATE)
         lines = text.split("\n")
@@ -255,12 +256,12 @@ class Parser:
             s = self.read_line()
             if not s.startswith("+"):
                 raise DiffError(f"Invalid Add File line (missing '+'): {s}")
-            lines.append(s[1:])  # strip leading '+'
+            lines.append(s[1:])  # elimina el '+' inicial
         return PatchAction(type=ActionType.ADD, new_file="\n".join(lines))
 
 
 # --------------------------------------------------------------------------- #
-#  Helper functions
+#  Funciones auxiliares
 # --------------------------------------------------------------------------- #
 def find_context_core(
     lines: List[str], context: List[str], start: int
@@ -376,7 +377,7 @@ def peek_next_section(
 
 
 # --------------------------------------------------------------------------- #
-#  Patch → Commit and Commit application
+#  Del parche al commit y aplicación del commit
 # --------------------------------------------------------------------------- #
 def _get_updated_file(text: str, action: PatchAction, path: str) -> str:
     if action.type is not ActionType.UPDATE:
@@ -430,10 +431,10 @@ def patch_to_commit(patch: Patch, orig: Dict[str, str]) -> Commit:
 
 
 # --------------------------------------------------------------------------- #
-#  User-facing helpers
+#  Funciones auxiliares de cara al usuario
 # --------------------------------------------------------------------------- #
 def text_to_patch(text: str, orig: Dict[str, str]) -> Tuple[Patch, int]:
-    lines = text.splitlines()  # preserves blank lines, no strip()
+    lines = text.splitlines()  # preserva las líneas en blanco, no aplica strip()
     if (
         len(lines) < 2
         or not Parser._norm(lines[0]).startswith("*** Begin Patch")
@@ -469,7 +470,7 @@ def identify_files_added(text: str) -> List[str]:
 
 
 # --------------------------------------------------------------------------- #
-#  File-system helpers
+#  Funciones auxiliares del sistema de archivos
 # --------------------------------------------------------------------------- #
 def load_files(paths: List[str], open_fn: Callable[[str], str]) -> Dict[str, str]:
     result: Dict[str, str] = {}
