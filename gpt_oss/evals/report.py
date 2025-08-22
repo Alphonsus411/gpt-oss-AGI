@@ -186,7 +186,7 @@ _report_template = """<!DOCTYPE html>
     {% endfor %}
     </table>
     {% endif %}
-    <h1>Examples</h1>
+    <h1>Ejemplos</h1>
     {% for html in htmls %}
     {{ html | safe }}
     <hr>
@@ -198,7 +198,7 @@ _report_template = """<!DOCTYPE html>
 
 def make_report(eval_result: EvalResult) -> str:
     """
-    Create a standalone HTML report from an EvalResult.
+    Crea un informe HTML independiente a partir de un `EvalResult`.
     """
     return jinja_env.from_string(_report_template).render(
         score=eval_result.score,

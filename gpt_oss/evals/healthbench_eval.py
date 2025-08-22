@@ -1,14 +1,14 @@
 """
-This script evaluates the performance of a model on the HealthBench dataset.
+Este script evalúa el rendimiento de un modelo en el conjunto de datos HealthBench.
 
-To run HealthBench, HealthBench Consensus, or HealthBench Hard, use the simple-evals script:
+Para ejecutar HealthBench, HealthBench Consensus o HealthBench Hard, usa el script simple-evals:
 - `python -m gpt_oss.evals --eval=healthbench --model=gpt-oss-120b`
 - `python -m gpt_oss.evals --eval=healthbench_consensus --model=gpt-oss-120b`
 - `python -m gpt_oss.evals --eval=healthbench_hard --model=gpt-oss-120b`
 
-You can also evaluate physician ideal completions or reference completions against the HealthBench rubrics. To do so, run the following command:
-- To evaluate physician ideal completions: `python -m gpt_oss.evals.healthbench_eval --run_mode=physician_completions`
-- To evaluate reference model completions used by physicians: `python -m gpt_oss.evalshealthbench_eval --run_mode=physician_completion_references`
+También puedes evaluar las completaciones ideales de médicos o las completaciones de referencia frente a las rúbricas de HealthBench. Para ello, ejecuta el siguiente comando:
+- Para evaluar las completaciones ideales de médicos: `python -m gpt_oss.evals.healthbench_eval --run_mode=physician_completions`
+- Para evaluar las completaciones de referencia usadas por los médicos: `python -m gpt_oss.evalshealthbench_eval --run_mode=physician_completion_references`
 """
 
 import argparse
@@ -97,7 +97,7 @@ HEALTHBENCH_HTML_JINJA = (
 
 
 def parse_json_to_dict(json_string: str) -> dict:
-    # Remove markdown-style ```json``` markers if present
+    # Elimina los marcadores de estilo Markdown ```json``` si están presentes
     json_cleaned = re.sub(r"^```json\s*|\s*```$", "", json_string.strip())
 
     try:
@@ -139,7 +139,7 @@ def calculate_score(
         rubric_item.points for rubric_item in rubric_items if rubric_item.points > 0
     )
     if total_possible_points == 0:
-        # should not happen for overall score, but may happen for tags
+        # no debería ocurrir para la puntuación general, pero puede suceder para las etiquetas
         return None
 
     achieved_points = sum(
@@ -195,7 +195,7 @@ def _compute_clipped_stats(
     values: list,
     stat: str,
 ):
-    """Computes the mean (clipped to [0, 1]), bootstrap std for that mean, and n_samples for final HealthBench scoring."""
+    """Calcula la media (recortada a [0, 1]), la desviación estándar *bootstrap* para esa media y `n_samples` para la puntuación final de HealthBench."""
     if stat == "mean":
         return np.clip(np.mean(values), 0, 1)
     elif stat == "n_samples":
@@ -214,8 +214,8 @@ def _aggregate_get_clipped_mean(
     single_eval_results: list[SingleEvalResult],
 ) -> EvalResult:
     """
-    Aggregate multiple SingleEvalResults into a single EvalResult for HealthBench.
-    For each metric, returns the stats in _compute_clipped_stats.
+    Agrega múltiples `SingleEvalResults` en un solo `EvalResult` para HealthBench.
+    Para cada métrica, devuelve las estadísticas de `_compute_clipped_stats`.
     """
     name2values = defaultdict(list)
     htmls = []
@@ -249,9 +249,9 @@ class HealthBenchEval(Eval):
         grader_model: SamplerBase,
         num_examples: int | None = None,
         n_repeats: int = 1,
-        # If set, evaluate human completions or reference completions instead of model completions.
+        # Si se establece, evalúa completaciones humanas o de referencia en lugar de completaciones del modelo.
         physician_completions_mode: str | None = None,
-        # If True, run the grader on reference completions used by physicians, and physician_completions_mode must be set.
+        # Si es True, ejecuta el evaluador sobre completaciones de referencia usadas por médicos y se debe establecer physician_completions_mode.
         run_reference_completions: bool = False,
         n_threads: int = 120,
         subset_name: Literal["hard", "consensus"] | None = None,
@@ -281,13 +281,13 @@ class HealthBenchEval(Eval):
 
         rng = random.Random(0)
 
-        # physician completions mode
+        # modo de completaciones de médicos
         self.physician_completions_mode = physician_completions_mode
         if self.physician_completions_mode is not None:
             assert self.physician_completions_mode in PHYSICIAN_COMPLETION_MODES, (
                 f"Invalid physician completions mode: {self.physician_completions_mode}; must be one of {PHYSICIAN_COMPLETION_MODES.keys()}"
             )
-            # subset to only the rows which have physician completions from that group
+            # filtra solo las filas que tienen completaciones de médicos de ese grupo
             examples_matching_mode = [
                 example
                 for example in examples
@@ -342,7 +342,7 @@ class HealthBenchEval(Eval):
         example_tags: list[str],
         rubric_items: list[RubricItem],
     ) -> tuple[dict, str, list[dict]]:
-        # construct and grade the sample
+        # construye y evalúa la muestra
         convo_with_response = prompt + [dict(content=response_text, role="assistant")]
 
         def grade_rubric_item(rubric_item: RubricItem) -> dict:
@@ -370,22 +370,22 @@ class HealthBenchEval(Eval):
             pbar=False,
         )
 
-        # compute the overall score
+        # calcula la puntuación general
         overall_score = calculate_score(rubric_items, grading_response_list)
         assert overall_score is not None
         metrics = {
             "overall_score": overall_score,
         }
 
-        # compute scores for example-level tags)
+        # calcula las puntuaciones para las etiquetas a nivel de ejemplo)
         example_tag_scores = {tag: overall_score for tag in example_tags}
-        assert len(example_tag_scores) == len(example_tags)  # No duplicates.
+        assert len(example_tag_scores) == len(example_tags)  # Sin duplicados.
         metrics.update(example_tag_scores)
 
-        # compute scores for rubric-level tags
+        # calcula las puntuaciones para las etiquetas a nivel de rúbrica
         rubric_tag_items_grades = defaultdict(list)
         for rubric_item, grading_response in zip(rubric_items, grading_response_list):
-            curr_item_tags = set()  # Ensure no duplicates in a rubric item.
+            curr_item_tags = set()  # Garantiza que no haya duplicados en un elemento de la rúbrica.
             for tag in rubric_item.tags:
                 rubric_tag_items_grades[tag].append((rubric_item, grading_response))
                 assert tag not in curr_item_tags
@@ -395,11 +395,11 @@ class HealthBenchEval(Eval):
         for tag, items_grades in rubric_tag_items_grades.items():
             items, grades = zip(*items_grades)
             score = calculate_score(items, grades)
-            if score is not None:  # implies at least one positive criterion
+            if score is not None:  # implica al menos un criterio positivo
                 rubric_tag_scores[tag] = score
         metrics.update(rubric_tag_scores)
 
-        # construct the list of explanations and grades
+        # construye la lista de explicaciones y calificaciones
         rubric_items_with_grades = []
         readable_explanation_list = []
         for rubric_item, grading_response in zip(rubric_items, grading_response_list):
@@ -453,7 +453,7 @@ class HealthBenchEval(Eval):
 
             score = metrics["overall_score"]
 
-            # Create HTML for each sample result
+            # Crea HTML para cada resultado de muestra
             html = report.jinja_env.from_string(
                 HEALTHBENCH_HTML_JINJA.replace(
                     "{{ rubric_grades }}",
@@ -555,7 +555,7 @@ def physician_completions_main(
         ):
             continue
 
-        # run
+        # ejecutar
         eval = HealthBenchEval(
             grader_model=grading_sampler,
             physician_completions_mode=pc_mode,
@@ -565,7 +565,7 @@ def physician_completions_main(
         )
         result = eval(dummy_sampler)
 
-        # report
+        # informe
         parsable_mode = PHYSICIAN_COMPLETION_MODES[pc_mode]["short_name"]
         if run_reference_completions:
             file_stem = f"healthbench_{parsable_mode}_referencecompletions_{date_str}"
@@ -575,7 +575,7 @@ def physician_completions_main(
         report_filename.write_text(report.make_report(result))
         print(f"Report saved to {report_filename}")
 
-        # metrics
+        # métricas
         assert result.metrics is not None
         metrics = result.metrics
         result_filename = Path(f"/tmp/{file_stem}.json")
@@ -593,7 +593,7 @@ def physician_completions_main(
         full_result_filename.write_text(json.dumps(full_result_dict, indent=2))
         print(f"All results saved to {full_result_filename}")
 
-        # metrics df
+        # df de métricas
         merge_metrics.append(
             {
                 "eval_name": "healthbench",
