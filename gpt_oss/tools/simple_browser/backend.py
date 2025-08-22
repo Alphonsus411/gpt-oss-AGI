@@ -3,6 +3,7 @@ Simple backend for the simple browser tool.
 """
 
 import functools
+import html
 import logging
 import os
 from abc import abstractmethod
@@ -129,17 +130,24 @@ class ExaBackend(Backend):
         )
         # make a simple HTML page to work with browser format
         titles_and_urls = [
-            (result["title"], result["url"], result["summary"])
+            (
+                html.escape(result["title"]),
+                html.escape(result["url"]),
+                html.escape(result["summary"]),
+            )
             for result in data["results"]
         ]
-        html_page = f"""
-<html><body>
-<h1>Search Results</h1>
-<ul>
-{"".join([f"<li><a href='{url}'>{title}</a> {summary}</li>" for title, url, summary in titles_and_urls])}
-</ul>
-</body></html>
-"""
+        html_page = (
+            "<html><body>"
+            "<h1>Search Results</h1>"
+            "<ul>"
+            + "".join(
+                f"<li><a href='{url}'>{title}</a> {summary}</li>"
+                for title, url, summary in titles_and_urls
+            )
+            + "</ul>"
+            + "</body></html>"
+        )
 
         return process_html(
             html=html_page,
