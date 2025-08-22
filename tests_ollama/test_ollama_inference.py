@@ -3,10 +3,16 @@ import threading
 import os
 import sys
 import time
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from gpt_oss.responses_api.inference.ollama import setup_model, EOS_TOKEN, PAD_TOKEN
+from gpt_oss.responses_api.inference.ollama import (
+    setup_model,
+    EOS_TOKEN,
+    PAD_TOKEN,
+    OllamaStreamer,
+)
 
 
 class DummyEncoding:
@@ -132,3 +138,25 @@ def test_pad_token_on_no_output(monkeypatch):
 
     tok = infer([], 0.0)
     assert tok == PAD_TOKEN
+
+
+def test_endpoint_validation_valid(monkeypatch):
+    monkeypatch.setattr(
+        "gpt_oss.responses_api.inference.ollama.load_harmony_encoding",
+        fake_load_harmony_encoding,
+    )
+
+    streamer = OllamaStreamer(
+        "model", endpoint_url="https://valid.example/api/generate"
+    )
+    assert streamer.endpoint_url == "https://valid.example/api/generate"
+
+
+def test_endpoint_validation_invalid(monkeypatch):
+    monkeypatch.setattr(
+        "gpt_oss.responses_api.inference.ollama.load_harmony_encoding",
+        fake_load_harmony_encoding,
+    )
+
+    with pytest.raises(ValueError):
+        OllamaStreamer("model", endpoint_url="ftp://invalid.example/api")
