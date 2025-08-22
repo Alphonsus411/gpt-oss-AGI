@@ -1,9 +1,10 @@
-"""FlashAttention w/support for learned sinks and banded attention.
+"""FlashAttention con soporte para *sinks* aprendidos y atención con bandas.
 
-This is an expanded version of the Flash Attention v2 implementation (see https://tridao.me/publications/flash2/flash2.pdf)
-which can be found at https://triton-lang.org/main/getting-started/tutorials/06-fused-attention.html.
+Esta es una versión ampliada de la implementación de Flash Attention v2 (ver
+https://tridao.me/publications/flash2/flash2.pdf) que se puede encontrar en
+https://triton-lang.org/main/getting-started/tutorials/06-fused-attention.html.
 
-This version has been extended to support banded attention and learned attention sinks.
+Esta versión se ha extendido para admitir atención con bandas y *sinks* aprendidos.
 """
 
 import pytest
