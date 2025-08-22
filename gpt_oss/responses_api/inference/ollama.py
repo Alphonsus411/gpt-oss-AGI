@@ -10,6 +10,7 @@ import threading
 import time
 from typing import Callable, Optional
 import requests
+from urllib.parse import urlparse
 
 from openai_harmony import load_harmony_encoding, HarmonyEncodingName
 
@@ -45,7 +46,13 @@ class OllamaStreamer:
     def __init__(self, model_name: str, endpoint_url: Optional[str] = None):
         self.encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
         self.model_name = model_name
-        self.endpoint_url = endpoint_url or os.environ.get("OLLAMA_ENDPOINT", DEFAULT_ENDPOINT_URL)
+        url = endpoint_url or os.environ.get("OLLAMA_ENDPOINT", DEFAULT_ENDPOINT_URL)
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(
+                f"Ollama endpoint must use HTTP or HTTPS, got: {url}"
+            )
+        self.endpoint_url = url
 
         # Per-instance state
         self._token_buffer: list[int] = []
