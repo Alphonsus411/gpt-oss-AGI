@@ -104,6 +104,18 @@ class ExaBackend(Backend):
         doc="Set of allowed domains. If provided, only URLs from these domains will be fetched.",
         default=None,
     )
+    timeout: float = chz.field(
+        doc="Timeout for HTTP requests in seconds.",
+        default=30.0,
+    )
+    num_retries: int = chz.field(
+        doc="Number of retries for HTTP requests.",
+        default=3,
+    )
+    max_wait_time: float = chz.field(
+        doc="Maximum wait time between retries in seconds.",
+        default=60.0,
+    )
 
     def _get_api_key(self) -> str:
         key = self.api_key or os.environ.get("EXA_API_KEY")
@@ -111,9 +123,20 @@ class ExaBackend(Backend):
             raise BackendError("Exa API key not provided")
         return key
 
-    async def _post(self, session: ClientSession, endpoint: str, payload: dict) -> dict:
+    async def _post(
+        self,
+        session: ClientSession,
+        endpoint: str,
+        payload: dict,
+        timeout: float,
+    ) -> dict:
         headers = {"x-api-key": self._get_api_key()}
-        async with session.post(f"{self.BASE_URL}{endpoint}", json=payload, headers=headers) as resp:
+        async with session.post(
+            f"{self.BASE_URL}{endpoint}",
+            json=payload,
+            headers=headers,
+            timeout=ClientTimeout(total=timeout),
+        ) as resp:
             if resp.status != 200:
                 raise BackendError(
                     f"Exa API error {resp.status}: {await resp.text()}"
@@ -123,10 +146,14 @@ class ExaBackend(Backend):
     async def search(
         self, query: str, topn: int, session: ClientSession
     ) -> PageContents:
-        data = await self._post(
+        post = with_retries(
+            self._post, self.num_retries, self.max_wait_time
+        )
+        data = await post(
             session,
             "/search",
             {"query": query, "numResults": topn, "contents": {"text": True, "summary": True}},
+            timeout=self.timeout,
         )
         # make a simple HTML page to work with browser format
         titles_and_urls = [
@@ -167,10 +194,14 @@ class ExaBackend(Backend):
         domain = get_domain(url)
         if self.allowed_domains is not None and domain not in self.allowed_domains:
             raise BackendError(f"Domain '{domain}' not allowed")
-        data = await self._post(
+        post = with_retries(
+            self._post, self.num_retries, self.max_wait_time
+        )
+        data = await post(
             session,
             "/contents",
             {"urls": [url], "text": { "includeHtmlTags": True }},
+            timeout=self.timeout,
         )
         results = data.get("results", [])
         if not results:
