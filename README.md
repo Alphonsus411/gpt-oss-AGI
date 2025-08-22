@@ -65,4 +65,6 @@ print(outputs[0]["generated_text"][-1])
 
 Para información sobre vLLM, PyTorch/Triton/Metal, Ollama, LM Studio y otros temas, consulta la documentación original en inglés.
 
+Visita también la lista [awesome-gpt-oss](awesome-gpt-oss.es.md) para encontrar herramientas y proyectos de la comunidad.
+
 [harmony]: https://github.com/openai/harmony
