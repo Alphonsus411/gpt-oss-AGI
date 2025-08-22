@@ -1,7 +1,8 @@
-# Model parallel inference
-# Note: This script is for demonstration purposes only. It is not designed for production use.
-#       See gpt_oss.chat for a more complete example with the Harmony parser.
-# torchrun --nproc-per-node=4 -m gpt_oss.generate -p "why did the chicken cross the road?" model/
+# Inferencia paralela de modelos
+# Nota: Este script es solo para fines de demostración. No está diseñado para uso en producción.
+#       Consulte gpt_oss.chat para un ejemplo más completo con el parser Harmony.
+# Ejemplo de uso:
+# torchrun --nproc-per-node=4 -m gpt_oss.generate -p "¿por qué cruzó la carretera la gallina?" model/
 #
 # Incluye un ``Planner`` que permite consultar metas y modos del agente.
 
@@ -42,20 +43,20 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Text generation example")
+    parser = argparse.ArgumentParser(description="Ejemplo de generación de texto")
     parser.add_argument(
         "checkpoint",
-        metavar="FILE",
+        metavar="ARCHIVO",
         type=str,
-        help="Path to the SafeTensors checkpoint",
+        help="Ruta al checkpoint de SafeTensors",
     )
     parser.add_argument(
         "-p",
         "--prompt",
         metavar="PROMPT",
         type=str,
-        default="How are you?",
-        help="LLM prompt",
+        default="¿Cómo estás?",
+        help="Prompt para el LLM",
     )
     parser.add_argument(
         "-t",
@@ -63,15 +64,15 @@ if __name__ == "__main__":
         metavar="TEMP",
         type=float,
         default=0.0,
-        help="Sampling temperature",
+        help="Temperatura de muestreo",
     )
     parser.add_argument(
         "-l",
         "--limit",
-        metavar="LIMIT",
+        metavar="LIMITE",
         type=int,
         default=0,
-        help="Limit on the number of tokens (0 to disable)",
+        help="Límite en el número de tokens (0 para desactivar)",
     )
     parser.add_argument(
         "-b",
@@ -80,7 +81,7 @@ if __name__ == "__main__":
         type=str,
         default="torch",
         choices=["triton", "torch", "vllm"],
-        help="Inference backend",
+        help="Backend de inferencia",
     )
     args = parser.parse_args()
 
