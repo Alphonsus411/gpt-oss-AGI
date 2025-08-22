@@ -7,6 +7,8 @@ from mcp.server.fastmcp import Context, FastMCP
 from gpt_oss.tools.simple_browser import SimpleBrowserTool
 from gpt_oss.tools.simple_browser.backend import ExaBackend
 
+SAFE_DOMAINS = {"openai.com"}
+
 
 @dataclass
 class AppContext:
@@ -14,7 +16,7 @@ class AppContext:
 
     def create_or_get_browser(self, session_id: str) -> SimpleBrowserTool:
         if session_id not in self.browsers:
-            backend = ExaBackend(source="web")
+            backend = ExaBackend(source="web", allowed_domains=SAFE_DOMAINS)
             self.browsers[session_id] = SimpleBrowserTool(backend=backend)
         return self.browsers[session_id]
 

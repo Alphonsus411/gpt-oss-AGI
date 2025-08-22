@@ -358,6 +358,7 @@ encoding = load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)
 # Exa backend requires you to have set the EXA_API_KEY environment variable
 backend = ExaBackend(
     source="web",
+    allowed_domains={"openai.com"},
 )
 browser_tool = SimpleBrowserTool(backend=backend)
 

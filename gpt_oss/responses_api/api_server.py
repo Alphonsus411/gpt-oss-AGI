@@ -23,6 +23,8 @@ from openai_harmony import (
 from gpt_oss.tools.simple_browser import SimpleBrowserTool
 from gpt_oss.tools.simple_browser.backend import ExaBackend
 
+SAFE_DOMAINS = {"openai.com"}
+
 from .events import (
     ResponseCompletedEvent,
     ResponseCreatedEvent,
@@ -750,6 +752,7 @@ def create_api_server(
         if use_browser_tool:
             backend = ExaBackend(
                 source="web",
+                allowed_domains=SAFE_DOMAINS,
             )
             browser_tool = SimpleBrowserTool(backend=backend)
         else:
