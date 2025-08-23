@@ -1,6 +1,6 @@
 """
-NOTE: this is not the most efficient way to use vLLM. It's a simple implementation that infers 
-one token at a time to mimic the behavior of the Triton implementation. 
+NOTA: esta no es la forma más eficiente de usar vLLM. Es una implementación sencilla
+que infiere un token a la vez para imitar el comportamiento de la implementación de Triton.
 """
 
 import os
@@ -15,8 +15,9 @@ TP = os.environ.get("TP", 2)
 
 def load_model(checkpoint: str):
     """
-    Create the vLLM engine. We enable prefix caching so repeated prefixes
-    across calls can reuse KV cache for faster prefill.
+    Crea el motor de vLLM. Activamos el almacenamiento en caché de prefijos
+    (prefix caching) para que los prefijos repetidos entre llamadas puedan
+    reutilizar la caché KV (KV cache) y acelerar el prefill.
     """
 
     llm = LLM(
@@ -31,14 +32,14 @@ def load_model(checkpoint: str):
 
 def get_infer_next_token(llm: LLM):
     """
-    Return a callable with the same shape as your original:
+    Devuelve una función callable con la misma firma que la original:
       infer_next_token(tokens: List[int], temperature: float, new_request: bool) -> int
 
-    Implementation detail:
-      - We issue a single-token generation with TokensPrompt(prompt_token_ids=tokens).
-      - vLLM handles sampling (temperature=0 => greedy).
-      - With enable_prefix_caching=True, the shared prefix prefill can be reused
-        across calls that share the same prefix.
+    Detalles de implementación:
+      - Se genera un único token usando TokensPrompt(prompt_token_ids=tokens).
+      - vLLM gestiona el muestreo (temperature=0 => greedy).
+      - Con enable_prefix_caching=True, el prefill del prefijo compartido se
+        reutiliza entre llamadas que comparten dicho prefijo.
     """
 
     # Maintain compatibility with your previous closure signature.
