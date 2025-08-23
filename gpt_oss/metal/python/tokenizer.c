@@ -97,7 +97,7 @@ static PyObject* PyGPTOSSTokenizer_encode_special_token(PyGPTOSSTokenizer* self,
 
 static PyObject* PyGPTOSSTokenizer_decode(PyGPTOSSTokenizer* self, PyObject* args, PyObject* kwargs) {
     static char *kwlist[] = {"token", NULL};
-    unsigned int token = 0; // Default to 0 if None
+    unsigned int token = 0; // Por defecto a 0 si es None
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "I", kwlist, &token)) {
         return NULL;

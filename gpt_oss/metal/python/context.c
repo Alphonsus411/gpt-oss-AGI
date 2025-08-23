@@ -8,7 +8,7 @@
 static int PyGPTOSSContext_init(PyGPTOSSContext* self, PyObject* args, PyObject* kwargs) {
     static char *kwlist[] = {"model", "context_length", NULL};
     PyObject* model = NULL;
-    Py_ssize_t context_length = 0; // Default to 0 if None
+    Py_ssize_t context_length = 0; // Por defecto a 0 si es None
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|$i", kwlist,
                                      &model, &context_length)) {
@@ -217,7 +217,7 @@ static PyObject* PyGPTOSSContext_get_tokens(PyGPTOSSContext* self, void* closure
         if (PyList_SetItem(token_list_obj, (Py_ssize_t) t, token_obj) < 0) {
             goto error;
         }
-        token_obj = NULL;  // PyList_SetItem stole the reference
+        token_obj = NULL;  // PyList_SetItem robó la referencia
     }
 
     PyMem_Free(token_ptr);

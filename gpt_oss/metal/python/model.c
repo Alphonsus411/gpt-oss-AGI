@@ -75,7 +75,7 @@ static PyGetSetDef PyGPTOSSModel_getseters[] = {
         .get = (getter) PyGPTOSSModel_get_tokenizer,
         .doc = "Tokenizer object associated with the model",
     },
-    {NULL}  // Sentinel
+    {NULL}  // Centinela
 };
 
 PyTypeObject PyGPTOSSModel_Type = {
