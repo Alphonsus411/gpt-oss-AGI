@@ -1,4 +1,4 @@
-"""Metal backend for :mod:`gpt_oss.responses_api`."""
+"""Backend de Metal para :mod:`gpt_oss.responses_api`."""
 
 from typing import Callable
 
@@ -6,7 +6,7 @@ from gpt_oss.metal import Context, Model
 
 
 def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
-    """Load the Metal model and return an inference function."""
+    """Carga el modelo de Metal y devuelve una función de inferencia."""
 
     model = Model(checkpoint)
     context = Context(model)
@@ -23,10 +23,10 @@ def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
     def infer_next_token(
         tokens: list[int], temperature: float = 0.0, new_request: bool = False
     ) -> int:
-        """Infer next token using incremental LCP caching when possible."""
+        """Inferir el siguiente token utilizando caché LCP incremental cuando sea posible."""
         nonlocal tokens_so_far
-
-        # Fast path: first call or explicitly new request.
+        
+        # Ruta rápida: primera llamada o nueva solicitud explícita.
         if new_request or not tokens_so_far:
             context.reset()
             for t in tokens:
@@ -35,7 +35,7 @@ def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
             context.process()
             return int(context.sample(temperature=temperature))
 
-        # Longest common prefix length
+        # Longitud del prefijo común más largo
         overlap = lcp(tokens_so_far, tokens)
         ol = len(overlap)
         prev_len = len(tokens_so_far)
@@ -43,10 +43,10 @@ def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
 
         diverged_midstream = (ol < prev_len) and (
             ol < cur_len
-        )  # mismatch not at the end
+        )  # desajuste que no está al final
 
         if diverged_midstream:
-            # safest: rebuild
+            # lo más seguro: reconstruir
             context.reset()
             for t in tokens:
                 context.append(t)
@@ -55,7 +55,7 @@ def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
             return int(context.sample(temperature=temperature))
 
         if cur_len > prev_len:
-            # pure extension (good for KV reuse)
+            # extensión pura (buena para reutilizar KV)
             extension = tokens[prev_len:]
             for t in extension:
                 context.append(t)
@@ -64,7 +64,7 @@ def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
             return int(context.sample(temperature=temperature))
 
         if cur_len < prev_len:
-            # truncation/backspace; easiest correct behavior is rebuild
+            # truncación/retroceso; la forma más sencilla de ser correcto es reconstruir
             context.reset()
             for t in tokens:
                 context.append(t)
@@ -72,7 +72,7 @@ def setup_model(checkpoint: str) -> Callable[[list[int], float], int]:
             context.process()
             return int(context.sample(temperature=temperature))
 
-        # cur_len == prev_len and everything matches => no new tokens; just sample.
+        # cur_len == prev_len y todo coincide => no hay nuevos tokens; solo muestrear.
         return int(context.sample(temperature=temperature))
 
     return infer_next_token
