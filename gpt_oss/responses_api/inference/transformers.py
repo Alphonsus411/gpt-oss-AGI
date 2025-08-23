@@ -1,12 +1,12 @@
 """
-NOTE: this is not the most efficient way to use transformers. It's a simple implementation that infers
-one token at a time to mimic the behavior of the Triton implementation.
+NOTA: esta no es la forma más eficiente de usar transformers. Es una implementación sencilla que infiere
+un token a la vez para imitar el comportamiento de la implementación de Triton.
 """
 
 import os
 from typing import Callable, List
 
-# Transformers imports
+# Importaciones de Transformers
 from transformers import AutoModelForCausalLM, PreTrainedModel
 import torch
 
@@ -16,7 +16,7 @@ TP = os.environ.get("TP", 2)
 
 def load_model(checkpoint: str):
     """
-    Serve the model directly with the Auto API.
+    Sirve el modelo directamente con la API Auto.
     """
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -30,18 +30,18 @@ def load_model(checkpoint: str):
 
 def get_infer_next_token(model: PreTrainedModel):
     """
-    Return a callable with the same shape as the original triton implementation:
+    Devuelve una función invocable con la misma forma que la implementación original de Triton:
       infer_next_token(tokens: List[int], temperature: float, new_request: bool) -> int
 
-    Implementation detail:
-      - We issue a single-token generation with using model.generate
-      - generate handles sampling (temperature=0 => greedy, otherwise, sampling).
+    Detalle de implementación:
+      - Realizamos una generación de un solo token usando ``model.generate``.
+      - ``generate`` maneja el muestreo (``temperature=0`` => codicioso, de lo contrario, muestreo).
     """
 
     def infer_next_token(
         tokens: List[int],
         temperature: float = DEFAULT_TEMPERATURE,
-        new_request: bool = False, # kept for interface compatibility; unused here
+        new_request: bool = False, # se mantiene para compatibilidad de la interfaz; aquí no se usa
     ) -> int:
         tokens = torch.tensor([tokens], dtype=torch.int64, device=model.device)
         output = model.generate(tokens, max_new_tokens=1, do_sample=temperature != 0, temperature=temperature)
