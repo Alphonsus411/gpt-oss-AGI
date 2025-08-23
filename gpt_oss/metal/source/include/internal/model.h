@@ -50,14 +50,14 @@ struct gptoss_model {
 
     uint32_t vocabulary_size;
 
-    // Maximum number of tokens that can be processed in a single batch.
-    // Once the batch size is reached, we process it to fill the KV cache.
+    // Número máximo de tokens que se pueden procesar en un único lote.
+    // Una vez que se alcanza el tamaño del lote, lo procesamos para llenar la caché KV.
     size_t max_batch_tokens;
 
     size_t weights_size;
     size_t allocation_size;
 
-    // Metal objects
+    // Objetos de Metal
     struct gptoss_metal_device device;
     size_t max_threadgroups;
     struct gptoss_metal_command_queue command_queue;
@@ -75,16 +75,16 @@ struct gptoss_model {
     struct gptoss_metal_function f32_sdpa_q8_d64_fn;
     struct gptoss_metal_function f32_softmax_fn;
 
-    // Activation buffers.
-    // TODO: merge into a single buffer.
-    struct gptoss_metal_buffer residual_activation_buffer;  // Residual stream
-    struct gptoss_metal_buffer rmsnorm_activation_buffer;  // Both attention & MLP RMSNorm output
-    struct gptoss_metal_buffer qkv_activation_buffer;  // QKV projection output
-    struct gptoss_metal_buffer sdpa_activation_buffer;  // SDPA output
-    struct gptoss_metal_buffer gate_activation_buffer;  // MoE gating output
-    struct gptoss_metal_buffer expert_activation_buffer;  // MoE expert predictions
-    struct gptoss_metal_buffer swiglu_activation_buffer;  // MLP+SwiGLU output
-    struct gptoss_metal_buffer moe_activation_buffer;  // MoE MLP output (per-active expert)
+    // Búferes de activación.
+    // TODO: fusionar en un único búfer.
+    struct gptoss_metal_buffer residual_activation_buffer;  // Flujo residual
+    struct gptoss_metal_buffer rmsnorm_activation_buffer;  // Salida RMSNorm de attention y de MLP
+    struct gptoss_metal_buffer qkv_activation_buffer;  // Salida de la proyección QKV
+    struct gptoss_metal_buffer sdpa_activation_buffer;  // Salida de SDPA
+    struct gptoss_metal_buffer gate_activation_buffer;  // Salida de gating MoE
+    struct gptoss_metal_buffer expert_activation_buffer;  // Predicciones de expertos MoE
+    struct gptoss_metal_buffer swiglu_activation_buffer;  // Salida de MLP+SwiGLU
+    struct gptoss_metal_buffer moe_activation_buffer;  // Salida MLP de MoE (por experto activo)
 
     size_t per_block_shared_weights_size;
     size_t per_expert_block_weight_size;
@@ -106,9 +106,9 @@ struct gptoss_model {
     size_t rmsnorm_weight_offset;
     size_t unembedding_weight_offset;
 
-    // Buffer with non-MoE weights. Includes MoE gates, embeddings/unembeddings.
+    // Búfer con pesos que no son de MoE. Incluye compuertas MoE y embeddings/unembeddings.
     struct gptoss_metal_buffer shared_weight_buffer;
-    // num_blocks per-block buffers with MoE weights to follow.
+    // Después siguen num_blocks búferes por bloque con pesos de MoE.
     struct gptoss_metal_buffer block_weight_buffers[];
 };
 
@@ -118,25 +118,25 @@ struct gptoss_context {
     atomic_uint_least64_t ref_count;
 
     struct gptoss_model* model;
-    // Number of tokens processed in the context.
+    // Número de tokens procesados en el contexto.
     size_t num_tokens;
-    // Number of tokens in the KV cache.
+    // Número de tokens en la caché KV.
     size_t num_kv_tokens;
-    // Length of the context.
+    // Longitud del contexto.
     size_t max_tokens;
 
-    // Current number of tokens in the batch.
-    // Always in the [0, max_batch_tokens) range.
+    // Número actual de tokens en el lote.
+    // Siempre en el rango [0, max_batch_tokens).
     size_t num_batch_tokens;
-    // Number of tokens processed in the last batch.
-    // Activations for [num_batch_tokens, num_processed_tokens) tokens can be accessed from internal structures.
+    // Número de tokens procesados en el último lote.
+    // Las activaciones para los tokens en el intervalo [num_batch_tokens, num_processed_tokens) se pueden acceder desde estructuras internas.
     size_t num_processed_tokens;
 
     size_t kvcache_size;
     size_t allocation_size;
 
-    struct gptoss_metal_buffer token_buffer;  // uint32 token IDs
-    struct gptoss_metal_buffer score_buffer;  // unembedding outputs
+    struct gptoss_metal_buffer token_buffer;  // IDs de tokens uint32
+    struct gptoss_metal_buffer score_buffer;  // Salidas de unembedding
     struct gptoss_metal_buffer prob_buffer;
     struct gptoss_metal_buffer sum_buffer;
     struct gptoss_metal_buffer argmax_buffer;
