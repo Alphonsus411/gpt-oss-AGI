@@ -268,18 +268,18 @@ def process_html(
     clean_html = lxml.etree.tostring(root, encoding="UTF-8").decode()
     text = html_to_text(clean_html)
     text = re.sub(WHITESPACE_ANCHOR_RE, lambda m: m.group(2) + m.group(1), text)
-    # ^^^ move anchors to the right thru whitespace
-    # This way anchors don't create extra whitespace
+    # ^^^ mover las anclas a la derecha a través de los espacios en blanco
+    # De este modo las anclas no crean espacios en blanco adicionales
     text = re.sub(EMPTY_LINE_RE, "", text)
-    # ^^^ Get rid of empty lines
+    # ^^^ eliminar líneas vacías
     text = re.sub(EXTRA_NEWLINE_RE, "\n\n", text)
-    # ^^^ Get rid of extra newlines
+    # ^^^ eliminar saltos de línea adicionales
 
     top_parts = []
     if display_urls:
         top_parts.append(f"\nURL: {url}\n")
-    # NOTE: Publication date is currently not extracted due
-    # to performance costs.
+    # NOTA: Actualmente no se extrae la fecha de publicación
+    # debido a los costos de rendimiento.
 
     return PageContents(
         url=url,
