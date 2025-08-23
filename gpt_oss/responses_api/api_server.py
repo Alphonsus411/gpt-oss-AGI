@@ -141,13 +141,13 @@ def create_api_server(
                         )
                     )
                 elif len(entry_dict.get("recipient", "")) > 0 and entry_dict["recipient"].startswith("browser.") and browser_tool is not None:
-                    # Mirror event-based creation of WebSearchCallItems when the browser tool is invoked
+                    # Reflejar la creación basada en eventos de WebSearchCallItems cuando se invoca la herramienta del navegador
                     name = entry_dict["recipient"]
                     call = entry_dict["content"][0]
                     arguments = call["text"]
                     function_name = name[len("browser."):]
 
-                    # Reconstruct a Message for argument parsing
+                    # Reconstruir un Message para analizar argumentos
                     tool_msg = (
                         Message.from_role_and_content(Role.ASSISTANT, arguments)
                         .with_recipient(name)
@@ -312,8 +312,8 @@ def create_api_server(
             self.as_sse = as_sse
             self.debug_mode = request_body.metadata.get(
                 "__debug", False
-            )  # we use this for demo purposes
-            # Set temperature for this stream, fallback to DEFAULT_TEMPERATURE if not set
+            )  # lo usamos con fines de demostración
+            # Establecer la temperatura para este flujo, usar DEFAULT_TEMPERATURE si no está definida
             self.temperature = (
                 request_body.temperature
                 if request_body.temperature is not None
@@ -363,19 +363,19 @@ def create_api_server(
             )
 
             current_content_index = (
-                0  # for this implementation we will always have one content item only
+                0  # en esta implementación siempre tendremos solo un elemento de contenido
             )
             current_output_index = -1
             sent_output_item_added = False
 
-            # we use this if the model outputs a citation to buffer until completed
-            output_delta_buffer = "" 
-            # we use this to track the current output text content for things like providing the right indices in citations
-            current_output_text_content = "" 
+            # lo usamos si el modelo produce una cita para almacenarla en el búfer hasta completarla
+            output_delta_buffer = ""
+            # lo usamos para rastrear el contenido de texto de salida actual, por ejemplo para proporcionar los índices correctos en las citas
+            current_output_text_content = ""
             current_annotations = []
 
             while True:
-                # Check for client disconnect
+                # Comprobar si el cliente se desconectó
                 if self.request is not None and await self.request.is_disconnected():
                     print("Client disconnected, stopping token generation.")
                     break
@@ -531,13 +531,13 @@ def create_api_server(
                     output_delta_buffer += self.parser.last_content_delta
                     should_send_output_text_delta = True
                     if browser_tool:
-                        # we normalize on the full current text to get the right indices in citations
+                        # normalizamos sobre todo el texto actual para obtener los índices correctos en las citas
                         updated_output_text, annotations, has_partial_citations = browser_tool.normalize_citations(current_output_text_content + output_delta_buffer)
-                        # remove the current text to get back the delta but now normalized
+                        # eliminar el texto actual para recuperar el delta pero ya normalizado
                         output_delta_buffer = updated_output_text[len(current_output_text_content):]
-                        
-                        # Filter annotations to only include those whose start_index is not already present in current_annotations
-                        # this is to avoid sending duplicate annotations as multiple annotations can't be in the same place
+
+                        # Filtrar anotaciones para incluir solo aquellas cuyo start_index no esté ya presente en current_annotations
+                        # esto evita enviar anotaciones duplicadas ya que múltiples anotaciones no pueden estar en el mismo lugar
                         existing_start_indices = {a["start_index"] for a in current_annotations}
                         new_annotations = [a for a in annotations if a["start_index"] not in existing_start_indices]
                         for a in new_annotations:
@@ -603,7 +603,7 @@ def create_api_server(
                     )
 
                 try:
-                    # purely for debugging purposes
+                    # solo con fines de depuración
                     output_token_text = encoding.decode_utf8([next_tok])
                     self.output_text += output_token_text
                     print(output_token_text, end="", flush=True)
@@ -716,7 +716,7 @@ def create_api_server(
                 if len(self.output_tokens) >= self.request_body.max_output_tokens:
                     break
 
-                # Adding in the end if we know we are not done
+                # Agregar al final si sabemos que no hemos terminado
                 self.output_tokens.append(next_tok)
 
             if self.request is None or not await self.request.is_disconnected():
@@ -833,7 +833,7 @@ def create_api_server(
                 len(body.input) > 0 and body.input[-1].type == "function_call_output"
             )
             function_call_map = {}
-            # Find the index of the last assistant message
+            # Encontrar el índice del último mensaje del asistente
             last_assistant_idx = -1
             for idx, item in enumerate(body.input):
                 if item.type == "message" and item.role == Role.ASSISTANT:
@@ -865,11 +865,11 @@ def create_api_server(
                             messages.append(
                                 Message.from_role_and_content(item.role, content_item.text)
                             )
-                    # add final channel to the last assistant message if it's from the assistant
+                    # agregar el canal final al último mensaje si proviene del asistente
                     if item.role == Role.ASSISTANT:
                         messages[-1] = messages[-1].with_channel("final")
                 elif item.type == "reasoning":
-                    # Only include reasoning if it is after the last assistant message and we are handling a function call at the moment
+                    # Incluir razonamiento solo si ocurre después del último mensaje del asistente y estamos manejando una llamada a función en ese momento
                     if (
                         idx > last_assistant_idx
                         and is_last_message_function_call_output
