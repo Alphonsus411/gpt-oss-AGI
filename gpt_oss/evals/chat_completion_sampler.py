@@ -59,7 +59,8 @@ class ChatCompletionSampler(SamplerBase):
                     response_metadata={"usage": response.usage},
                     actual_queried_message_list=message_list,
                 )
-            # NOTE: BadRequestError is triggered once for MMMU, please uncomment if you are reruning MMMU
+            # NOTA: durante MMMU la API lanza una BadRequestError una vez;
+            # si vas a repetir MMMU, descomenta este bloque para manejar la excepción
             except openai.BadRequestError as e:
                 print("Bad Request Error", e)
                 return SamplerResponse(
