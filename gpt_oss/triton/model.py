@@ -462,7 +462,7 @@ class Transformer(torch.nn.Module):
             else:
                 param.data.copy_(loaded_tensor)
 
-        # NOTE: Required to avoid OOM errors
+        # NOTA: Necesario para evitar errores de falta de memoria (OOM)
         torch.cuda.empty_cache()
         return model
 
