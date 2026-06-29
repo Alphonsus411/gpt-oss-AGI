@@ -42,3 +42,15 @@ def test_core_qualia_engine_govern_decision_returns_blocked_result():
     assert blocked is not None
     assert blocked["blocked"] is True
     assert blocked["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
+
+
+def test_core_qualia_engine_must_block_moral_decision_even_without_flag():
+    request = {
+        "qualia": {
+            "blocked": False,
+            "moral_decision": {"allowed": False},
+            "legal_policy_action": "blocked_illegal_or_unsafe_decision",
+        }
+    }
+
+    assert CoreQualiaEngine.must_block(request) is True

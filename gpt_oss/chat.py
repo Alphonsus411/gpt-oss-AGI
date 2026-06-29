@@ -181,7 +181,7 @@ def main(args):
                 },
                 phase="chat_input",
             )
-            if qualia_engine.is_blocked(qualia_request):
+            if qualia_engine.must_block(qualia_request):
                 blocked = qualia_engine.blocked_result(qualia_request)
                 qualia_engine.after_decision(blocked, qualia_state, phase="chat_input")
                 safe_text = (

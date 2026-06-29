@@ -52,7 +52,7 @@ class ReasoningKernel:
         request = {"task": task, "context": context, "goals": goals}
         request.update(step)
         request = self.qualia_engine.before_decision(request, phase="kernel_step")
-        if self.qualia_engine.is_blocked(request):
+        if self.qualia_engine.must_block(request):
             result = self.qualia_engine.blocked_result(request)
             state: Dict[str, Any] = {}
             self.qualia_engine.after_decision(result, state, phase="kernel_step")

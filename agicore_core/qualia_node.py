@@ -101,6 +101,7 @@ class QualiaNode:
         self.version_mismatch_policy = str(
             self.profile.get("version_mismatch_policy", "block_advanced")
         )
+        self.runtime_profile = str(self.profile.get("runtime_profile", "local_safe"))
         self.compatibility_report = build_compatibility_report(
             required_version=self.required_agix_version,
             version_mismatch_policy=self.version_mismatch_policy,
@@ -122,6 +123,46 @@ class QualiaNode:
             neuromorphic_config=self.profile.get("neuromorphic_agent", {}),
         )
         self._load_agix_components()
+        self._strict_runtime_errors = self._validate_strict_runtime()
+        if self.runtime_profile == "strict_compatible" and self._strict_runtime_errors:
+            raise RuntimeError(
+                "Contrato AGIX/Qualia estricto incumplido: "
+                + "; ".join(self._strict_runtime_errors)
+            )
+
+    def _compatibility_payload(
+        self, evolutionary_signals: Mapping[str, Any] | None = None
+    ) -> Dict[str, Any]:
+        payload = self.compatibility_report.as_dict()
+        payload["runtime_profile"] = self.runtime_profile
+        payload["strict_runtime_errors"] = list(self._strict_runtime_errors)
+        contract = None
+        if evolutionary_signals is not None:
+            contract = evolutionary_signals.get("agix_runtime_contract")
+        if contract is None:
+            contract = self._evolution.validate_runtime_contract()
+        payload["evolution_contract"] = contract
+        return payload
+
+    def _validate_strict_runtime(self) -> List[str]:
+        if self.runtime_profile != "strict_compatible":
+            return []
+        errors: List[str] = []
+        if not self._version_compatible:
+            errors.append(
+                f"agix_version_required={self.required_agix_version}, detected={self._agix_version!r}"
+            )
+        if self._qualia_engine is None:
+            errors.append("qualia_engine_not_available")
+        if self._moral_evaluator is None and self._ecoethics is None:
+            errors.append("ethical_evaluator_not_available")
+        contract = self._evolution.validate_runtime_contract()
+        for name, status in contract.items():
+            if status.get("enabled") and (
+                not status.get("active") or status.get("degraded")
+            ):
+                errors.append(f"{name}_contract_degraded")
+        return errors
 
     @staticmethod
     def default_policies(
@@ -300,6 +341,9 @@ class QualiaNode:
         version_policy_action = self._version_policy_action()
         evolutionary_signals = self._evolution.enrich(enriched)
         evolutionary_signals["version_policy_action"] = version_policy_action
+        evolutionary_signals["strict_runtime_errors"] = list(
+            self._strict_runtime_errors
+        )
         evolutionary_signals["advanced_disabled"] = not self._advanced_agix_enabled()
         evolutionary_signals["runtime_mode"] = self.compatibility_report.mode
         blocked = classification == "nocivo" or not moral_decision.allowed
@@ -337,7 +381,9 @@ class QualiaNode:
             "agix_available": self._agix_version is not None,
             "version_compatible": self._version_compatible,
             "version_policy_action": version_policy_action,
-            "agix_compatibility_report": self.compatibility_report.as_dict(),
+            "agix_compatibility_report": self._compatibility_payload(
+                evolutionary_signals
+            ),
             "phase": phase,
             "policies": [policy.__dict__ for policy in self.policies],
             "cognitive_patterns": [pattern.__dict__ for pattern in self.patterns],
@@ -410,8 +456,21 @@ class QualiaNode:
         state["cognitive_patterns"] = [pattern.name for pattern in self.patterns]
         state["agix_version"] = self._agix_version
         state["agix_version_compatible"] = self._version_compatible
-        state["agix_compatibility_report"] = self.compatibility_report.as_dict()
+        state["agix_compatibility_report"] = self._compatibility_payload()
         state["evolution_feedback"] = feedback
+        state["qualia_genetic_feedback"] = {
+            key: feedback.get(key)
+            for key in (
+                "reward",
+                "genetic_feedback_applied",
+                "genetic_feedback_method",
+                "genetic_policy_update",
+                "selected_policy",
+                "mutation_rate",
+                "crossover_rate",
+            )
+            if key in feedback
+        }
         state["qualia_neuromorphic_feedback"] = {
             key: feedback.get(key)
             for key in (
