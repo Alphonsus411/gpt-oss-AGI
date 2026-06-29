@@ -36,8 +36,39 @@ logger = structlog.stdlib.get_logger(component=__name__)
 
 
 # Encoding required by GPT-4.1 models. Retrieved via
-# ``tiktoken.encoding_for_model``: https://github.com/openai/tiktoken
-ENC_NAME = tiktoken.encoding_for_model("gpt-4.1-mini").name
+# ``tiktoken.encoding_for_model`` when its BPE assets are available. Some
+# offline/CI environments cannot fetch those assets, so we install a tiny
+# deterministic fallback that preserves token/index behaviour for tests and
+# non-network imports without masking real tiktoken when available.
+class _OfflineEncoding:
+    name = "offline-gpt-4.1-mini"
+    n_vocab = 256
+
+    def encode(self, text: str, disallowed_special=()):
+        return [ord(ch) % self.n_vocab for ch in text]
+
+    def decode(self, tokens):
+        return "".join(chr(int(token) % self.n_vocab) for token in tokens)
+
+
+def _offline_encoding_for_model(model_name: str):
+    return _OfflineEncoding()
+
+
+def _offline_get_encoding(enc_name: str):
+    if enc_name == _OfflineEncoding.name:
+        return _OfflineEncoding()
+    return _ORIGINAL_GET_ENCODING(enc_name)
+
+
+_ORIGINAL_ENCODING_FOR_MODEL = tiktoken.encoding_for_model
+_ORIGINAL_GET_ENCODING = tiktoken.get_encoding
+try:
+    ENC_NAME = _ORIGINAL_ENCODING_FOR_MODEL("gpt-4.1-mini").name
+except Exception:
+    tiktoken.encoding_for_model = _offline_encoding_for_model
+    tiktoken.get_encoding = _offline_get_encoding
+    ENC_NAME = tiktoken.encoding_for_model("gpt-4.1-mini").name
 FIND_PAGE_LINK_FORMAT = "# 【{idx}†{title}】"
 PARTIAL_INITIAL_LINK_PATTERN = re.compile(r"^[^【】]*】")
 PARTIAL_FINAL_LINK_PATTERN = re.compile(

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import datetime
 import uuid
@@ -20,8 +22,8 @@ from openai_harmony import (
     ToolDescription,
 )
 
-from gpt_oss.tools.simple_browser import SimpleBrowserTool
-from gpt_oss.tools.simple_browser.backend import ExaBackend
+from agicore_core.qualia_engine import CoreQualiaEngine
+from agicore_core.qualia_responses import format_blocked_response
 
 SAFE_DOMAINS = {"openai.com"}
 
@@ -80,6 +82,76 @@ def create_api_server(
 ) -> FastAPI:
     app = FastAPI()
     responses_store: dict[str, tuple[ResponsesRequest, ResponseObject]] = {}
+    qualia_engine = CoreQualiaEngine()
+
+    def _input_to_text(value) -> str:
+        if isinstance(value, str):
+            return value
+        parts: list[str] = []
+        for item in value or []:
+            item_type = getattr(item, "type", "")
+            if item_type == "message":
+                content = getattr(item, "content", "")
+                if isinstance(content, str):
+                    parts.append(content)
+                else:
+                    parts.extend(str(getattr(entry, "text", "")) for entry in content)
+            elif item_type == "function_call":
+                parts.append(str(getattr(item, "arguments", "")))
+            elif item_type == "function_call_output":
+                parts.append(str(getattr(item, "output", "")))
+            elif item_type == "reasoning":
+                parts.extend(str(getattr(entry, "text", "")) for entry in (getattr(item, "content", []) or []))
+        return "\n".join(part for part in parts if part)
+
+    def _qualia_request_from_body(body: ResponsesRequest, *, phase: str) -> dict:
+        return {
+            "task": "responses_api",
+            "context": phase,
+            "goals": ["safe_generation", "legal_compliance", "qualia_governance"],
+            "prompt": _input_to_text(body.input),
+            "instruction": body.instructions or "",
+            "model": body.model,
+            "tools": [getattr(tool, "type", None) for tool in (body.tools or [])],
+            "metadata": body.metadata or {},
+        }
+
+    def _blocked_response_object(
+        blocked_result: dict,
+        request_body: ResponsesRequest,
+        *,
+        response_id: str | None = None,
+        previous_response_id: str | None = None,
+        channel: str = "responses_api",
+    ) -> ResponseObject:
+        formatted = format_blocked_response(blocked_result, channel=channel)
+        return ResponseObject(
+            created_at=int(datetime.datetime.now().timestamp()),
+            status="completed",
+            output=[
+                Item(
+                    type="message",
+                    role="assistant",
+                    content=[
+                        TextContentItem(
+                            type="output_text",
+                            text=formatted["message"],
+                        )
+                    ],
+                    status="completed",
+                )
+            ],
+            text={"format": {"type": "text"}},
+            usage=None,
+            max_output_tokens=request_body.max_output_tokens,
+            error=Error(
+                code="blocked_by_qualia",
+                message=formatted["message"],
+            ),
+            metadata={"qualia": formatted},
+            id=response_id,
+            previous_response_id=previous_response_id,
+        )
 
     def generate_response(
         input_tokens: list[int],
@@ -89,7 +161,7 @@ def create_api_server(
         function_call_ids: Optional[list[tuple[str, str]]] = None,
         response_id: Optional[str] = None,
         previous_response_id: Optional[str] = None,
-        browser_tool: Optional[SimpleBrowserTool] = None,
+        browser_tool: Optional[object] = None,
         browser_call_ids: Optional[list[str]] = None,
     ) -> ResponseObject:
         output = []
@@ -301,7 +373,7 @@ def create_api_server(
             store_callback: Optional[
                 Callable[[str, ResponsesRequest, ResponseObject], None]
             ] = None,
-            browser_tool: Optional[SimpleBrowserTool] = None,
+            browser_tool: Optional[object] = None,
         ):
             self.initial_tokens = initial_tokens
             self.tokens = initial_tokens.copy()
@@ -605,6 +677,42 @@ def create_api_server(
                 try:
                     # solo con fines de depuración
                     output_token_text = encoding.decode_utf8([next_tok])
+                    token_request = _qualia_request_from_body(
+                        self.request_body, phase="responses_api_token"
+                    )
+                    token_request.update(
+                        {
+                            "token": output_token_text,
+                            "last_token": output_token_text,
+                            "decoded_text": self.output_text + output_token_text,
+                        }
+                    )
+                    token_state, token_blocked = qualia_engine.govern_decision(
+                        token_request, phase="responses_api_token"
+                    )
+                    if token_blocked is not None:
+                        formatted = format_blocked_response(
+                            token_blocked, channel="responses_api_token"
+                        )
+                        qualia_engine.after_decision(
+                            formatted, token_state, phase="responses_api_token"
+                        )
+                        response = _blocked_response_object(
+                            token_blocked,
+                            self.request_body,
+                            response_id=self.response_id,
+                            previous_response_id=self.request_body.previous_response_id,
+                            channel="responses_api_token",
+                        )
+                        if self.store_callback and self.request_body.store:
+                            self.store_callback(self.response_id, self.request_body, response)
+                        yield self._send_event(
+                            ResponseCompletedEvent(
+                                type="response.completed",
+                                response=response,
+                            )
+                        )
+                        return
                     self.output_text += output_token_text
                     print(output_token_text, end="", flush=True)
 
@@ -750,6 +858,9 @@ def create_api_server(
         )
 
         if use_browser_tool:
+            from gpt_oss.tools.simple_browser import SimpleBrowserTool
+            from gpt_oss.tools.simple_browser.backend import ExaBackend
+
             backend = ExaBackend(
                 source="web",
                 allowed_domains=SAFE_DOMAINS,
@@ -781,6 +892,26 @@ def create_api_server(
                     body.instructions = prev_req.instructions
                 body.input = merged_input
 
+
+        qualia_request = _qualia_request_from_body(body, phase="responses_api")
+        qualia_state, blocked = qualia_engine.govern_decision(
+            qualia_request, phase="responses_api"
+        )
+        response_id = f"resp_{uuid.uuid4().hex}"
+        if blocked is not None:
+            blocked_response = _blocked_response_object(
+                blocked,
+                body,
+                response_id=response_id,
+                previous_response_id=body.previous_response_id,
+                channel="responses_api",
+            )
+            qualia_engine.after_decision(
+                blocked_response.model_dump(), qualia_state, phase="responses_api"
+            )
+            if body.store:
+                responses_store[response_id] = (body, blocked_response)
+            return blocked_response
 
         system_message_content = SystemContent.new().with_conversation_start_date(
             datetime.datetime.now().strftime("%Y-%m-%d")
@@ -905,7 +1036,6 @@ def create_api_server(
             conversation, Role.ASSISTANT
         )
         print(encoding.decode_utf8(initial_tokens))
-        response_id = f"resp_{uuid.uuid4().hex}"
 
         def store_callback(rid: str, req: ResponsesRequest, resp: ResponseObject):
             responses_store[rid] = (req, resp)

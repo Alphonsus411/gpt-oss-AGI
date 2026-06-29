@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,12 +56,30 @@ class MoralDecision:
 
 
 def _load_profile() -> Dict[str, Any]:
-    path = Path(__file__).resolve().parent / "config" / "qualia_profile.json"
+    env_path = os.environ.get("AGICORE_QUALIA_PROFILE")
+    path = (
+        Path(env_path).expanduser()
+        if env_path
+        else Path(__file__).resolve().parent / "config" / "qualia_profile.json"
+    )
     try:
         with path.open("r", encoding="utf-8") as handle:
-            return json.load(handle)
+            profile = json.load(handle)
     except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        profile = {}
+
+    require_runtime = os.environ.get("AGIX_REQUIRE_RUNTIME")
+    if require_runtime is not None:
+        profile["require_agix_runtime"] = require_runtime.strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    runtime_profile = os.environ.get("AGIX_RUNTIME_PROFILE")
+    if runtime_profile:
+        profile["runtime_profile"] = runtime_profile
+    return profile
 
 
 class QualiaNode:
