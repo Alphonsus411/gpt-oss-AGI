@@ -34,12 +34,45 @@ class CoreQualiaEngine:
 
         return self.qualia_node.integrate_response(result, state, phase=phase)
 
+    def govern_decision(
+        self, request: Mapping[str, Any], *, phase: str
+    ) -> tuple[Dict[str, Any], Dict[str, Any] | None]:
+        """Aplica el gobierno central Qualia antes de ejecutar una decisión.
+
+        Devuelve la petición enriquecida y, cuando las políticas morales,
+        legales u ontoéticas bloquean la operación, un resultado seguro
+        auditable. Los puntos de entrada que reciben un ``blocked_result`` no
+        deben invocar el GPT, el router ni ningún backend de generación.
+        """
+
+        enriched = self.before_decision(request, phase=phase)
+        if self.must_block(enriched):
+            return enriched, self.blocked_result(enriched)
+        return enriched, None
+
     @staticmethod
     def is_blocked(enriched_request: Mapping[str, Any]) -> bool:
         """Indica si una petición enriquecida está bloqueada por Qualia."""
 
         qualia = enriched_request.get("qualia")
         return isinstance(qualia, dict) and bool(qualia.get("blocked"))
+
+    @classmethod
+    def must_block(cls, enriched_request: Mapping[str, Any]) -> bool:
+        """Centraliza bloqueos morales, legales y de clasificación ética."""
+
+        qualia = enriched_request.get("qualia")
+        if not isinstance(qualia, dict):
+            return False
+        moral_decision = qualia.get("moral_decision")
+        moral_blocked = (
+            isinstance(moral_decision, dict)
+            and moral_decision.get("allowed") is False
+        )
+        illegal_or_unsafe = (
+            qualia.get("legal_policy_action") == "blocked_illegal_or_unsafe_decision"
+        )
+        return cls.is_blocked(enriched_request) or moral_blocked or illegal_or_unsafe
 
     @staticmethod
     def blocked_result(enriched_request: Mapping[str, Any]) -> Dict[str, Any]:

@@ -238,17 +238,59 @@ def test_scores_update_with_episode_history():
     assert bad.received is None
 
 
-def test_meta_router_refuses_blocked_qualia_request():
+def test_meta_router_returns_blocked_qualia_result_without_calling_expert():
     router = MetaRouter()
-    router.register("safe", DummyModule(), tasks=["analizar"], contexts=["ctx"], goals=["ok"])
+    dummy = DummyModule()
+    router.register("safe", dummy, tasks=["analizar"], contexts=["ctx"], goals=["ok"])
 
-    with pytest.raises(ValueError, match="Qualia"):
-        router.route({
+    result = router.route({
             "task": "analizar",
             "context": "ctx",
             "goals": ["ok"],
-            "qualia": {"blocked": True},
+            "qualia": {
+                "blocked": True,
+                "policy_action": "blocked_by_ontoethical_policy",
+                "legal_policy_action": "blocked_illegal_or_unsafe_decision",
+                "ethical_classification": "nocivo",
+                "violated_constraints": [{"name": "ilegalidad"}],
+                "moral_decision": {
+                    "allowed": False,
+                    "safe_alternative": "Explicar mitigación segura.",
+                },
+                "decision_audit": {"phase": "unit"},
+            },
         })
+
+    assert result["blocked"] is True
+    assert result["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
+    assert dummy.received is None
+
+
+def test_meta_router_records_blocked_qualia_episode():
+    memory = StrategicMemory()
+    router = MetaRouter(memory=memory)
+    router.register("safe", DummyModule(), tasks=["analizar"], contexts=["ctx"], goals=["ok"])
+
+    result = router.route({
+        "task": "analizar",
+        "context": "ctx",
+        "goals": ["ok"],
+        "qualia": {
+            "blocked": True,
+            "policy_action": "blocked_by_ontoethical_policy",
+            "legal_policy_action": "blocked_illegal_or_unsafe_decision",
+            "ethical_classification": "nocivo",
+            "violated_constraints": [{"name": "ilegalidad"}],
+            "moral_decision": {
+                "allowed": False,
+                "safe_alternative": "Explicar mitigación segura.",
+            },
+            "decision_audit": {"phase": "unit"},
+        },
+    })
+
+    assert result["blocked"] is True
+    assert memory._episodes[-1].metadata["status"] == "blocked_by_qualia"
 
 
 def test_meta_router_enriches_direct_requests_with_qualia_node():

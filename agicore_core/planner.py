@@ -53,8 +53,8 @@ class Planner:
 
     def __init__(self, orchestrator: Optional[Any] = None, qualia_node: Optional[Any] = None) -> None:
         self.orchestrator = orchestrator or _load_virtual_qualia()()
-        self.qualia_engine = CoreQualiaEngine(qualia_node) if qualia_node is not None else None
-        self.qualia_node = self.qualia_engine.qualia_node if self.qualia_engine else None
+        self.qualia_engine = CoreQualiaEngine(qualia_node)
+        self.qualia_node = self.qualia_engine.qualia_node
 
         config_path = Path(__file__).resolve().parent / "config" / "agent_profile.json"
         try:
@@ -82,20 +82,19 @@ class Planner:
             orquestador.
         """
         planning_state = dict(state)
-        if self.qualia_engine is not None and "qualia" not in planning_state:
-            planning_state = self.qualia_engine.before_decision(
+        if "qualia" not in planning_state:
+            planning_state, blocked = self.qualia_engine.govern_decision(
                 planning_state, phase="planning"
             )
-            if self.qualia_engine.is_blocked(planning_state):
-                blocked_plan = [self.qualia_engine.blocked_result(planning_state)]
+            if blocked is not None:
+                blocked_plan = [blocked]
                 self.qualia_engine.after_decision(
                     blocked_plan, planning_state, phase="planning"
                 )
                 return blocked_plan
         try:
             plan = self.orchestrator.broadcast_state(planning_state)
-            if self.qualia_engine is not None:
-                self.qualia_engine.after_decision(plan, planning_state, phase="planning")
+            self.qualia_engine.after_decision(plan, planning_state, phase="planning")
             return plan
         except Exception:  # pragma: no cover - logging side effect
             logger.exception("Error al difundir el estado")

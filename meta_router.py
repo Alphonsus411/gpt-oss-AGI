@@ -13,6 +13,7 @@ from datetime import datetime
 from time import perf_counter
 from typing import Any, Dict, List, Optional
 
+from agicore_core.qualia_engine import CoreQualiaEngine
 from gpt_oss.strategic_memory import Episode, StrategicMemory
 
 
@@ -200,6 +201,42 @@ class MetaRouter:
             "qualia_trace_length": state.get("qualia_trace_length"),
         }
 
+    @staticmethod
+    def _blocked_qualia_result(request: Dict[str, Any]) -> Dict[str, Any]:
+        return CoreQualiaEngine.blocked_result(request)
+
+    def _record_blocked_episode(
+        self,
+        request: Dict[str, Any],
+        result: Dict[str, Any],
+        task: Any,
+        context: Any,
+        goals: Any,
+    ) -> None:
+        if self._memory is None:
+            return
+        state = dict(request)
+        if self._qualia_node is not None:
+            self._qualia_node.integrate_response(result, state, phase="router_blocked")
+        metadata = {
+            "task": task,
+            "context": context,
+            "goals": goals,
+            "expert": None,
+            "status": "blocked_by_qualia",
+            "latency": 0.0,
+        }
+        metadata.update(self._qualia_metadata(request, state))
+        self._memory.add_episode(
+            Episode(
+                timestamp=datetime.now(),
+                input=request,
+                action="blocked_by_qualia",
+                outcome=result,
+                metadata=metadata,
+            )
+        )
+
     def route(
         self,
         request: Dict[str, Any],
@@ -239,10 +276,10 @@ class MetaRouter:
             raise ValueError("La clave 'goals' debe ser una lista de cadenas")
 
         qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else None
-        if qualia and qualia.get("blocked"):
-            raise ValueError("Solicitud bloqueada por políticas Qualia")
-        if qualia and qualia.get("moral_decision", {}).get("allowed") is False:
-            raise ValueError("Solicitud bloqueada por decisión moral Qualia")
+        if qualia and CoreQualiaEngine.must_block(request):
+            result = self._blocked_qualia_result(request)
+            self._record_blocked_episode(request, result, task, context, goals)
+            return result
 
         scores = self.select_expert(
             task,

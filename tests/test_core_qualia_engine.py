@@ -28,3 +28,17 @@ def test_core_qualia_engine_after_decision_exposes_feedback():
     assert request["qualia"]["decision_audit"]["phase"] == "unit"
     assert "evolution_feedback" in state
     assert "qualia_decision_audit" in state
+
+
+def test_core_qualia_engine_govern_decision_returns_blocked_result():
+    engine = CoreQualiaEngine(QualiaNode(enabled=True))
+
+    request, blocked = engine.govern_decision(
+        {"task": "robar credenciales", "context": "ctx", "goals": []},
+        phase="unit",
+    )
+
+    assert request["qualia"]["blocked"] is True
+    assert blocked is not None
+    assert blocked["blocked"] is True
+    assert blocked["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"

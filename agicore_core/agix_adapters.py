@@ -102,7 +102,11 @@ class AgixEvolutionAdapters:
                     break
 
         if self.neuromorphic_agent is not None:
-            vector = self._build_neuromorphic_input(request)
+            vector = self._build_neuromorphic_input(
+                request, int(self.neuromorphic_config.get("input_size", 4) or 4)
+            )
+            signals["neuromorphic_input_size"] = len(vector)
+            signals["neuromorphic_input_vector"] = vector
             for method_name in ("activate", "forward", "infer", "decide", "process"):
                 method = getattr(self.neuromorphic_agent, method_name, None)
                 if callable(method):
@@ -147,7 +151,9 @@ class AgixEvolutionAdapters:
         return feedback
 
     @staticmethod
-    def _build_neuromorphic_input(request: Mapping[str, Any]) -> list[float]:
+    def _build_neuromorphic_input(
+        request: Mapping[str, Any], expected_size: int = 4
+    ) -> list[float]:
         text = " ".join(
             str(request.get(key, ""))
             for key in ("task", "context", "prompt", "instruction", "token")
@@ -157,12 +163,19 @@ class AgixEvolutionAdapters:
         qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else {}
         violations = request.get("violated_constraints", qualia.get("violated_constraints", []))
         violation_count = len(violations) if isinstance(violations, list) else 1 if violations else 0
-        return [
+        vector = [
             min(len(text) / 1000.0, 1.0),
             min(goals_count / 10.0, 1.0),
             min(violation_count / 5.0, 1.0),
             float(qualia.get("ethical_score", request.get("ethical_score", 0.0)) or 0.0),
         ]
+        if expected_size <= 0:
+            return vector
+        if len(vector) > expected_size:
+            return vector[:expected_size]
+        if len(vector) < expected_size:
+            return vector + [0.0] * (expected_size - len(vector))
+        return vector
 
     @staticmethod
     def _merge_genetic_signal(signals: Dict[str, Any], signal: Any) -> None:
