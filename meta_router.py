@@ -25,6 +25,9 @@ class Expert:
     contexts: List[str] = field(default_factory=list)
     goals: List[str] = field(default_factory=list)
     priority: int = 0
+    qualia_policies: List[str] = field(default_factory=list)
+    cognitive_patterns: List[str] = field(default_factory=list)
+    risk_profile: str = "standard"
 
 
 class MetaRouter:
@@ -65,6 +68,9 @@ class MetaRouter:
         contexts: List[str] | None = None,
         goals: List[str] | None = None,
         priority: int = 0,
+        qualia_policies: List[str] | None = None,
+        cognitive_patterns: List[str] | None = None,
+        risk_profile: str = "standard",
     ) -> None:
         """Registra un nuevo ``module`` bajo ``name`` con metadatos opcionales."""
         if name in self._experts:
@@ -76,6 +82,9 @@ class MetaRouter:
             contexts=contexts or [],
             goals=goals or [],
             priority=priority,
+            qualia_policies=qualia_policies or [],
+            cognitive_patterns=cognitive_patterns or [],
+            risk_profile=risk_profile,
         )
 
     def select_expert(
@@ -87,6 +96,7 @@ class MetaRouter:
         weight_task: int = 1,
         weight_context: int = 1,
         weight_goal: int = 1,
+        qualia: Dict[str, Any] | None = None,
     ) -> Dict[str, int]:
         """Calcula un puntaje para cada experto registrado.
 
@@ -109,6 +119,9 @@ class MetaRouter:
             ``goals`` respectivamente.
         """
 
+        if qualia and qualia.get("blocked"):
+            return {}
+
         episodes = []
         if self._memory is not None:
             pattern = {"task": task, "context": context, "goals": goals}
@@ -123,6 +136,24 @@ class MetaRouter:
             if context in expert.contexts:
                 score += weight_context
             score += weight_goal * len(goals_set.intersection(expert.goals))
+
+            if qualia:
+                policy_names = {
+                    policy.get("name", "") if isinstance(policy, dict) else str(policy)
+                    for policy in qualia.get("policies", [])
+                }
+                if policy_names and expert.qualia_policies:
+                    score += len(policy_names.intersection(expert.qualia_policies))
+                active_patterns = {
+                    pattern.get("name", pattern) if isinstance(pattern, dict) else pattern
+                    for pattern in qualia.get("cognitive_patterns", [])
+                }
+                score += len(active_patterns.intersection(expert.cognitive_patterns))
+                classification = qualia.get("ethical_classification")
+                if classification == "cuestionable":
+                    score -= 1
+                if classification == "nocivo":
+                    score -= 100
 
             if episodes:
                 relevant = [
@@ -175,6 +206,10 @@ class MetaRouter:
         if not isinstance(goals, list) or not all(isinstance(g, str) for g in goals):
             raise ValueError("La clave 'goals' debe ser una lista de cadenas")
 
+        qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else None
+        if qualia and qualia.get("blocked"):
+            raise ValueError("Solicitud bloqueada por políticas Qualia")
+
         scores = self.select_expert(
             task,
             context,
@@ -182,6 +217,7 @@ class MetaRouter:
             weight_task=weight_task,
             weight_context=weight_context,
             weight_goal=weight_goal,
+            qualia=qualia,
         )
         if not scores:
             raise ValueError("No hay expertos registrados")
@@ -214,6 +250,8 @@ class MetaRouter:
                         "expert": selected_name,
                         "status": "failure",
                         "latency": perf_counter() - start,
+                        "ethical_classification": (qualia or {}).get("ethical_classification"),
+                        "violated_constraints": (qualia or {}).get("violated_constraints", []),
                     },
                 )
                 self._memory.add_episode(episode)
@@ -232,6 +270,8 @@ class MetaRouter:
                     "expert": selected_name,
                     "status": "success",
                     "latency": perf_counter() - start,
+                    "ethical_classification": (qualia or {}).get("ethical_classification"),
+                    "violated_constraints": (qualia or {}).get("violated_constraints", []),
                 },
             )
             self._memory.add_episode(episode)

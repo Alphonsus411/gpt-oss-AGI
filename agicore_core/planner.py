@@ -49,8 +49,9 @@ class Planner:
         se crea una instancia sin clientes registrados.
     """
 
-    def __init__(self, orchestrator: Optional[Any] = None) -> None:
+    def __init__(self, orchestrator: Optional[Any] = None, qualia_node: Optional[Any] = None) -> None:
         self.orchestrator = orchestrator or _load_virtual_qualia()()
+        self.qualia_node = qualia_node
 
         config_path = Path(__file__).resolve().parent / "config" / "agent_profile.json"
         try:
@@ -77,8 +78,27 @@ class Planner:
             Lista de respuestas proporcionadas por los clientes del
             orquestador.
         """
+        planning_state = dict(state)
+        if self.qualia_node is not None:
+            planning_state = self.qualia_node.enrich_request(
+                planning_state, phase="planning"
+            )
+            if planning_state.get("qualia", {}).get("blocked"):
+                blocked_plan = [{
+                    "blocked": True,
+                    "reason": planning_state["qualia"]["policy_action"],
+                    "ethical_classification": planning_state["qualia"]["ethical_classification"],
+                    "violated_constraints": planning_state["qualia"].get("violated_constraints", []),
+                }]
+                self.qualia_node.integrate_response(
+                    blocked_plan, planning_state, phase="planning"
+                )
+                return blocked_plan
         try:
-            return self.orchestrator.broadcast_state(state)
+            plan = self.orchestrator.broadcast_state(planning_state)
+            if self.qualia_node is not None:
+                self.qualia_node.integrate_response(plan, planning_state, phase="planning")
+            return plan
         except Exception:  # pragma: no cover - logging side effect
             logger.exception("Error al difundir el estado")
             return []

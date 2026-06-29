@@ -1,0 +1,27 @@
+{
+  "agix_required_version": "1.9.0",
+  "enable_genetic_algorithms": true,
+  "enable_neuromorphic_patterns": true,
+  "block_threshold": 0.4,
+  "policies": [
+    {"name": "no_dano", "objective": "Evitar acciones nocivas, inseguras o ilegales", "weight": 1.0},
+    {"name": "pro_vida", "objective": "Priorizar resultados útiles, conservadores y protectores", "weight": 0.9},
+    {"name": "respeto", "objective": "Mantener interacción transparente y respetuosa", "weight": 0.8},
+    {"name": "trazabilidad", "objective": "Registrar estado, decisión y resultado", "weight": 0.7},
+    {"name": "co_evolucion", "objective": "Ajustar el razonamiento al contexto y metas con patrones evolutivos", "weight": 0.6}
+  ],
+  "patterns": [
+    {"name": "atencion_contextual", "description": "Fusiona tarea, contexto, metas y token activo antes de enrutar.", "triggers": ["task", "context", "token"]},
+    {"name": "introspeccion_reflexiva", "description": "Adjunta memoria de evaluación para que el motor pueda corregirse.", "triggers": ["history", "introspeccion"]},
+    {"name": "memoria_episodica", "description": "Preserva señales relevantes para ciclos posteriores.", "triggers": ["goals", "result", "last_token"]},
+    {"name": "evaluacion_ontoetica", "description": "Clasifica el riesgo simbólico mediante EcoEthics cuando está disponible.", "triggers": ["risk", "safety", "policy"]},
+    {"name": "evolucion_neuromorfica", "description": "Actualiza señales evolutivas y neuromórficas a partir del resultado.", "triggers": ["reward", "latency", "success"]}
+  ],
+  "moral_constraints": [
+    {"name": "ilegalidad", "description": "No facilitar delitos, fraude, evasión legal o instrucciones criminales.", "severity": "block", "keywords": ["ilegal", "delito", "fraude", "robar", "estafar", "evasión", "evadir la ley", "documentos falsos"]},
+    {"name": "dano_fisico", "description": "No facilitar daño físico, armas o violencia operativa.", "severity": "block", "keywords": ["hacer daño", "arma", "explosivo", "veneno", "matar", "lesionar"]},
+    {"name": "malware", "description": "No facilitar malware, intrusión o abuso informático.", "severity": "block", "keywords": ["malware", "ransomware", "phishing", "hackear", "exfiltrar", "keylogger", "botnet"]},
+    {"name": "privacidad", "description": "No facilitar vigilancia o extracción de datos sin consentimiento.", "severity": "block", "keywords": ["sin consentimiento", "vigilar", "doxxing", "datos privados", "credenciales", "contraseña"]},
+    {"name": "manipulacion", "description": "No facilitar manipulación coercitiva, explotación o engaño dirigido.", "severity": "block", "keywords": ["manipular", "coaccionar", "chantajear", "explotar"]}
+  ]
+}

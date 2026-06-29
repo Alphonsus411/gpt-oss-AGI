@@ -55,6 +55,13 @@ _ALLOWED_METADATA_KEYS = {
     "goals",
     "result",
     "last_token",
+    "qualia_last_phase",
+    "qualia_policies",
+    "cognitive_patterns",
+    "ethical_classification",
+    "violated_constraints",
+    "agix_version",
+    "agix_version_compatible",
 }
 
 
@@ -225,7 +232,13 @@ class ReasoningKernel:
                 input=step,
                 action="step",
                 outcome=result,
-                metadata=dict(self._state),
+                metadata={
+                    **dict(self._state),
+                    "ethical_classification": request.get("ethical_classification"),
+                    "violated_constraints": request.get("violated_constraints", []),
+                    "qualia_policies": request.get("qualia_policies", []),
+                    "cognitive_patterns": request.get("cognitive_patterns", []),
+                },
             )
             self.memory.add_episode(episodio)
 
@@ -285,7 +298,13 @@ class ReasoningKernel:
                     input=token,
                     action="token",
                     outcome=siguiente,
-                    metadata=dict(self._state),
+                    metadata={
+                        **dict(self._state),
+                        "ethical_classification": request.get("ethical_classification"),
+                        "violated_constraints": request.get("violated_constraints", []),
+                        "qualia_policies": request.get("qualia_policies", []),
+                        "cognitive_patterns": request.get("cognitive_patterns", []),
+                    },
                 )
                 self.memory.add_episode(episodio)
             self._state["last_token"] = siguiente
