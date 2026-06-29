@@ -289,3 +289,20 @@ def test_meta_router_uses_evolutionary_recommendation_to_score_experts():
     assert router.route(request) == "ok"
     assert chosen.received is not None
     assert other.received is None
+
+
+def test_meta_router_records_qualia_feedback_after_direct_route():
+    from agicore_core.qualia_node import QualiaNode
+
+    memory = StrategicMemory()
+    router = MetaRouter(memory=memory, qualia_node=QualiaNode())
+    router.register("safe", DummyModule(), tasks=["analizar"], contexts=["ctx"], goals=["ok"])
+
+    assert router.route({"task": "analizar", "context": "ctx", "goals": ["ok"]}) == "ok"
+
+    episode = memory._episodes[-1]
+    assert episode.metadata["status"] == "success"
+    assert episode.metadata["qualia_last_phase"] == "router"
+    assert "evolution_feedback" in episode.metadata
+    assert "qualia_neuromorphic_feedback" in episode.metadata
+    assert episode.metadata["qualia_decision_audit"]

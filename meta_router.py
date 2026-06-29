@@ -179,6 +179,27 @@ class MetaRouter:
             scores[name] = score
         return scores
 
+
+    @staticmethod
+    def _qualia_metadata(request: Dict[str, Any], state: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else {}
+        state = state or {}
+        return {
+            "ethical_classification": qualia.get("ethical_classification"),
+            "violated_constraints": qualia.get("violated_constraints", []),
+            "qualia_policy_action": qualia.get("policy_action"),
+            "qualia_legal_policy_action": qualia.get("legal_policy_action"),
+            "qualia_ethical_evidence": qualia.get("ethical_evidence", {}),
+            "qualia_evolutionary_signals": qualia.get("evolutionary_signals", {}),
+            "qualia_decision_audit": state.get("qualia_decision_audit", qualia.get("decision_audit", {})),
+            "qualia_neuromorphic_feedback": state.get(
+                "qualia_neuromorphic_feedback", request.get("qualia_neuromorphic_feedback", {})
+            ),
+            "evolution_feedback": state.get("evolution_feedback", {}),
+            "qualia_last_phase": state.get("qualia_last_phase"),
+            "qualia_trace_length": state.get("qualia_trace_length"),
+        }
+
     def route(
         self,
         request: Dict[str, Any],
@@ -250,54 +271,62 @@ class MetaRouter:
         try:
             result = expert.handle(request)
         except Exception as exc:  # pragma: no cover - reemisión tras registro
+            state = dict(request)
+            if self._qualia_node is not None and qualia:
+                self._qualia_node.integrate_response({"error": str(exc)}, state, phase="router_error")
             if self._memory is not None:
+                metadata = {
+                    "task": task,
+                    "context": context,
+                    "goals": goals,
+                    "expert": selected_name,
+                    "status": "failure",
+                    "latency": perf_counter() - start,
+                }
+                metadata.update(self._qualia_metadata(request, state))
                 episode = Episode(
                     timestamp=datetime.now(),
                     input=request,
                     action=selected_name,
                     outcome=str(exc),
-                    metadata={
-                        "task": task,
-                        "context": context,
-                        "goals": goals,
-                        "expert": selected_name,
-                        "status": "failure",
-                        "latency": perf_counter() - start,
-                        "ethical_classification": (qualia or {}).get("ethical_classification"),
-                        "violated_constraints": (qualia or {}).get("violated_constraints", []),
-                        "qualia_policy_action": (qualia or {}).get("policy_action"),
-                        "qualia_legal_policy_action": (qualia or {}).get("legal_policy_action"),
-                        "qualia_ethical_evidence": (qualia or {}).get("ethical_evidence", {}),
-                        "qualia_evolutionary_signals": (qualia or {}).get("evolutionary_signals", {}),
-                        "qualia_decision_audit": (qualia or {}).get("decision_audit", {}),
-                        "qualia_neuromorphic_feedback": request.get("qualia_neuromorphic_feedback", {}),
-                    },
+                    metadata=metadata,
                 )
                 self._memory.add_episode(episode)
             raise
 
+        state = dict(request)
+        if self._qualia_node is not None and qualia:
+            self._qualia_node.integrate_response(result, state, phase="router")
+            request.update(
+                {
+                    key: state[key]
+                    for key in (
+                        "qualia_neuromorphic_feedback",
+                        "evolution_feedback",
+                        "qualia_decision_audit",
+                        "qualia_last_phase",
+                        "qualia_trace_length",
+                    )
+                    if key in state
+                }
+            )
+
         if self._memory is not None:
+            metadata = {
+                "task": task,
+                "context": context,
+                "goals": goals,
+                "expert": selected_name,
+                "status": "success",
+                "latency": perf_counter() - start,
+            }
+            metadata.update(self._qualia_metadata(request, state))
             episode = Episode(
                 timestamp=datetime.now(),
                 input=request,
                 action=selected_name,
                 outcome=result,
-                metadata={
-                    "task": task,
-                    "context": context,
-                    "goals": goals,
-                    "expert": selected_name,
-                    "status": "success",
-                    "latency": perf_counter() - start,
-                    "ethical_classification": (qualia or {}).get("ethical_classification"),
-                    "violated_constraints": (qualia or {}).get("violated_constraints", []),
-                    "qualia_policy_action": (qualia or {}).get("policy_action"),
-                    "qualia_legal_policy_action": (qualia or {}).get("legal_policy_action"),
-                    "qualia_ethical_evidence": (qualia or {}).get("ethical_evidence", {}),
-                    "qualia_evolutionary_signals": (qualia or {}).get("evolutionary_signals", {}),
-                    "qualia_decision_audit": (qualia or {}).get("decision_audit", {}),
-                    "qualia_neuromorphic_feedback": request.get("qualia_neuromorphic_feedback", {}),
-                },
+                metadata=metadata,
             )
             self._memory.add_episode(episode)
 

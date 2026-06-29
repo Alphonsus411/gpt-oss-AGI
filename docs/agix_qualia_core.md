@@ -26,3 +26,34 @@ Las restricciones configuradas en `agicore_core/config/qualia_profile.json` son 
 ## Extensión
 
 Para añadir políticas o patrones nuevos, ampliar `QualiaPolicy`, `CognitivePattern` o `MoralConstraint` desde el perfil JSON. Para integrar nuevas capacidades AGIX, añadir candidatos en `agix_compat.py` y normalizar su salida en `AgixEvolutionAdapters`.
+
+## Actualización de gobierno central Qualia
+
+El Core trata `QualiaNode` como punto rector de cada decisión GPT: las rutas del
+`ReasoningKernel`, el ciclo de tokens y las llamadas directas a `MetaRouter` con
+`qualia_node` pasan por enriquecimiento previo y por integración posterior de
+feedback. Esto preserva en el estado o en la memoria las políticas aplicadas, la
+clasificación ética, las restricciones legales, la auditoría de decisión, las
+señales genéticas y las señales neuromórficas.
+
+### Modos AGIX 1.9.0
+
+- `strict_compatible`: AGIX 1.9.0 está instalado y sus componentes avanzados se
+  pueden usar.
+- `local_safe`: AGIX no está disponible; se mantienen restricciones morales,
+  políticas locales y auditoría, pero se desactivan algoritmos genéticos y
+  patrones neuromórficos cuando la política es `block_advanced`.
+- `degraded` o `advanced_blocked`: la versión instalada no coincide con la
+  validada; se bloquean capacidades avanzadas salvo política explícita `warn`.
+- `version_warn`: permite operar con advertencia cuando el perfil lo solicita.
+
+### Garantías de integración
+
+| Garantía | Implementación |
+| --- | --- |
+| Bloqueo moral/legal | `QualiaNode` combina restricciones por perfil, patrones semánticos locales y evaluadores AGIX opcionales. |
+| Trazabilidad | `decision_audit`, `qualia_trace_length` y metadata de episodios registran cada fase. |
+| Algoritmos genéticos | `AgixEvolutionAdapters` consulta agentes genéticos de AGIX cuando están disponibles y habilitados. |
+| Patrones neuromórficos | El agente neuromórfico puede aportar activación antes del enrutado y feedback después de la respuesta. |
+| Memoria fenomenológica | Si `GestorDeMemoria` existe, se registran experiencias de petición y respuesta. |
+| Router directo | `MetaRouter(qualia_node=...)` enriquece la petición e integra feedback posterior. |

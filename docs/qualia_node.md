@@ -31,3 +31,12 @@ Cada método que enruta trabajo al GPT sigue este patrón:
 2. `QualiaNode.enrich_request(...)` añade `qualia`, `qualia_policies` y `cognitive_patterns`.
 3. `MetaRouter.route(...)` recibe la solicitud enriquecida.
 4. `QualiaNode.integrate_response(...)` actualiza el estado con `qualia_last_phase`, `qualia_trace_length` y las políticas activas.
+
+## Políticas de versión y capacidades avanzadas
+
+El perfil `block_advanced` mantiene el modo seguro local cuando AGIX no está
+instalado: el Core sigue bloqueando solicitudes ilegales mediante políticas
+locales, pero marca los algoritmos genéticos y patrones neuromórficos como no
+habilitados hasta detectar un runtime AGIX compatible. Si AGIX 1.9.0 está
+presente, el nodo activa adaptadores genéticos, patrones neuromórficos,
+`QualiaEngine` y memoria fenomenológica de forma opcional y auditable.
