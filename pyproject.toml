@@ -35,8 +35,11 @@ requires = ["setuptools>=68"]
 build-backend = "gpt_oss_build_backend.backend"
 backend-path = ["_build"]
 
-[tool.setuptools]
-packages = ["gpt_oss", "agicore_core"]
+[tool.setuptools.packages.find]
+include = ["gpt_oss*", "agicore_core*"]
+
+[tool.setuptools.package-data]
+agicore_core = ["config/*.json"]
 
 [tool.scikit-build]
 cmake.source-dir = "." # pick up the root CMakeLists.txt

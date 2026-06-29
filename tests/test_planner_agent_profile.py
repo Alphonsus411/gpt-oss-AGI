@@ -4,9 +4,6 @@ import logging
 import sys
 import types
 
-import pytest
-
-
 
 def test_inicializacion_con_json_invalido(tmp_path, monkeypatch, caplog):
     """El planificador debería manejar un JSON inválido."""
@@ -31,3 +28,22 @@ def test_inicializacion_con_json_invalido(tmp_path, monkeypatch, caplog):
         planificador = planner_module.Planner()
     assert planificador.agent_profile == {}
     assert "Failed to load agent profile" in caplog.text
+
+
+def test_planner_acepta_orquestador_explicito_sin_importar_agix(monkeypatch):
+    """El planificador puede inicializarse con un orquestador compatible."""
+
+    from agicore_core import planner as planner_module
+
+    def fail_load_virtual_qualia():
+        raise AssertionError("No debería cargarse AGIX si hay orquestador explícito")
+
+    class DummyOrchestrator:
+        def broadcast_state(self, state):
+            return [{"state": state}]
+
+    monkeypatch.setattr(planner_module, "_load_virtual_qualia", fail_load_virtual_qualia)
+
+    planificador = planner_module.Planner(orchestrator=DummyOrchestrator())
+
+    assert planificador.plan({"goal": "test"}) == [{"state": {"goal": "test"}}]

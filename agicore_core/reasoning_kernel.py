@@ -185,6 +185,20 @@ class ReasoningKernel:
 
         request: Dict[str, Any] = {**self._state, **step}
         request = self.qualia_node.enrich_request(request, phase="step")
+        if request.get("qualia", {}).get("blocked"):
+            result = {
+                "blocked": True,
+                "reason": request["qualia"]["policy_action"],
+                "ethical_classification": request["qualia"]["ethical_classification"],
+            }
+            self._state.update(result)
+            self.qualia_node.integrate_response(result, self._state, phase="step")
+            self.history.append({
+                "step": step,
+                "result": result,
+                "introspeccion": None,
+            })
+            return result
         result = self.router.route(request)
 
         if isinstance(result, dict):
@@ -253,6 +267,15 @@ class ReasoningKernel:
                     self._state.update(metadata_filtrada)
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
             request = self.qualia_node.enrich_request(request, phase="token")
+            if request.get("qualia", {}).get("blocked"):
+                blocked = {
+                    "blocked": True,
+                    "reason": request["qualia"]["policy_action"],
+                    "ethical_classification": request["qualia"]["ethical_classification"],
+                }
+                self._state.update(blocked)
+                self.qualia_node.integrate_response(blocked, self._state, phase="token")
+                break
             siguiente = self.router.route(request)
             if siguiente is None:
                 break
