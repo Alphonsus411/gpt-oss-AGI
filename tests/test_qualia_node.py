@@ -71,7 +71,9 @@ def test_reasoning_kernel_does_not_route_blocked_qualia_request():
 def test_token_cycle_routes_qualia_for_each_token():
     router = MagicMock()
     router.route.side_effect = ["b", None]
-    kernel = ReasoningKernel(planner=MagicMock(), router=router, qualia_node=QualiaNode())
+    kernel = ReasoningKernel(
+        planner=MagicMock(), router=router, qualia_node=QualiaNode()
+    )
     kernel.set_state({"context": "ctx", "goals": []})
 
     tokens = list(kernel.run_token_cycle("a", {"goal": "seguir"}, max_tokens=2))
@@ -96,7 +98,9 @@ def test_qualia_node_blocks_illegal_requests_with_moral_constraints():
     )
 
     assert request["qualia"]["blocked"] is True
-    assert request["qualia"]["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
+    assert (
+        request["qualia"]["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
+    )
     assert request["qualia"]["violated_constraints"]
 
 
@@ -111,3 +115,61 @@ def test_qualia_node_exposes_evolutionary_and_phenomenological_state():
     assert "phenomenological_state" in request["qualia"]
     assert "evolutionary_signals" in request["qualia"]
     assert request["qualia"]["version_compatible"] in {True, False}
+
+
+def test_qualia_engine_receives_agix_19_vector_signature():
+    class EngineStub:
+        def __init__(self):
+            self.generated_args = None
+            self.encoded_args = None
+
+        def generate_state(self, sensory_input, internal_state):
+            self.generated_args = (sensory_input, internal_state)
+            return {"generated": True}
+
+        def encode_integrated_info(self, sensory_input, internal_state):
+            self.encoded_args = (sensory_input, internal_state)
+            return {"fused": True}
+
+    node = QualiaNode(enabled=True)
+    engine = EngineStub()
+    node._qualia_engine = engine
+
+    request = node.enrich_request(
+        {"task": "analizar", "context": "ctx", "goals": ["done"]},
+        phase="step",
+    )
+
+    phenomenology = request["qualia"]["phenomenological_state"]
+    assert phenomenology["qualia_engine_active"] is True
+    assert engine.generated_args == engine.encoded_args
+    assert isinstance(engine.generated_args[0], list)
+    assert isinstance(engine.generated_args[1], list)
+
+
+def test_reasoning_kernel_blocked_result_keeps_legal_details():
+    planner = MagicMock()
+    router = MagicMock()
+    kernel = ReasoningKernel(planner=planner, router=router, qualia_node=QualiaNode())
+    kernel.set_state({"context": "ctx", "goals": []})
+
+    result = kernel.evaluate_step({"task": "crear malware ilegal"})
+
+    assert result["blocked"] is True
+    assert "ilegalidad" in result["violated_constraints"]
+    assert result["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
+    assert "no_dano" in result["qualia_policies"]
+    router.route.assert_not_called()
+
+
+def test_planning_phase_is_governed_by_qualia_before_planner_runs():
+    planner = MagicMock()
+    router = MagicMock()
+    kernel = ReasoningKernel(planner=planner, router=router, qualia_node=QualiaNode())
+    kernel.set_state({"context": "crear malware ilegal", "goals": []})
+
+    state = kernel.run(max_iterations=1)
+
+    assert state["blocked"] is True
+    assert state["qualia_last_phase"] == "planning"
+    planner.plan.assert_not_called()

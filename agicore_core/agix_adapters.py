@@ -18,6 +18,8 @@ class AgixEvolutionAdapters:
 
     enable_genetic_algorithms: bool = True
     enable_neuromorphic_patterns: bool = True
+    genetic_config: Mapping[str, Any] = field(default_factory=dict)
+    neuromorphic_config: Mapping[str, Any] = field(default_factory=dict)
     genetic_agent: Any | None = field(default=None, init=False)
     neuromorphic_agent: Any | None = field(default=None, init=False)
 
@@ -29,20 +31,34 @@ class AgixEvolutionAdapters:
             self.genetic_agent = self._instantiate_first(
                 ("agix.agents.genetic", "GeneticAgent"),
                 ("agix.agents", "GeneticAgent"),
+                config=self.genetic_config or {"action_space_size": 4},
             )
         if self.enable_neuromorphic_patterns:
             self.neuromorphic_agent = self._instantiate_first(
                 ("agix.agents.neuromorphic", "NeuromorphicAgent"),
                 ("agix.agents", "NeuromorphicAgent"),
+                config=self.neuromorphic_config,
             )
 
     @staticmethod
-    def _instantiate_first(*candidates: tuple[str, str]) -> Any | None:
+    def _instantiate_first(
+        *candidates: tuple[str, str],
+        config: Mapping[str, Any] | None = None,
+    ) -> Any | None:
+        init_config = dict(config or {})
         for module_name, class_name in candidates:
             try:
                 module = importlib.import_module(module_name)
                 cls = getattr(module, class_name)
-                return cls()
+                try:
+                    return cls(**init_config)
+                except TypeError:
+                    if (
+                        class_name == "GeneticAgent"
+                        and "action_space_size" not in init_config
+                    ):
+                        return cls(action_space_size=4)
+                    return cls()
             except Exception:
                 continue
         return None
@@ -69,11 +85,15 @@ class AgixEvolutionAdapters:
                     break
         return signals
 
-    def integrate_feedback(self, result: Any, state: Mapping[str, Any]) -> Dict[str, Any]:
+    def integrate_feedback(
+        self, result: Any, state: Mapping[str, Any]
+    ) -> Dict[str, Any]:
         """Propaga feedback de resultado a agentes evolutivos si existen."""
 
         feedback = {"evolution_feedback_applied": False}
-        reward = 1.0 if not (isinstance(result, dict) and result.get("blocked")) else -1.0
+        reward = (
+            1.0 if not (isinstance(result, dict) and result.get("blocked")) else -1.0
+        )
         if self.neuromorphic_agent is not None:
             for method_name in ("update", "learn", "plasticity_update"):
                 method = getattr(self.neuromorphic_agent, method_name, None)
