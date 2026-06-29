@@ -236,3 +236,16 @@ def test_scores_update_with_episode_history():
     router.route({"task": "t", "context": "c", "goals": ["g"]})
     assert good.received is not None
     assert bad.received is None
+
+
+def test_meta_router_refuses_blocked_qualia_request():
+    router = MetaRouter()
+    router.register("safe", DummyModule(), tasks=["analizar"], contexts=["ctx"], goals=["ok"])
+
+    with pytest.raises(ValueError, match="Qualia"):
+        router.route({
+            "task": "analizar",
+            "context": "ctx",
+            "goals": ["ok"],
+            "qualia": {"blocked": True},
+        })

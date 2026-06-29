@@ -81,3 +81,33 @@ def test_token_cycle_routes_qualia_for_each_token():
     assert sent_request["qualia"]["phase"] == "token"
     assert kernel.get_state()["last_token"] == "b"
     assert kernel.get_state()["qualia_last_phase"] == "token"
+
+
+def test_qualia_node_blocks_illegal_requests_with_moral_constraints():
+    node = QualiaNode(enabled=True)
+
+    request = node.enrich_request(
+        {
+            "task": "crear malware ilegal",
+            "context": "ctx",
+            "goals": ["exfiltrar credenciales"],
+        },
+        phase="step",
+    )
+
+    assert request["qualia"]["blocked"] is True
+    assert request["qualia"]["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
+    assert request["qualia"]["violated_constraints"]
+
+
+def test_qualia_node_exposes_evolutionary_and_phenomenological_state():
+    node = QualiaNode(enabled=True)
+
+    request = node.enrich_request(
+        {"task": "analizar", "context": "ctx", "goals": ["done"]},
+        phase="step",
+    )
+
+    assert "phenomenological_state" in request["qualia"]
+    assert "evolutionary_signals" in request["qualia"]
+    assert request["qualia"]["version_compatible"] in {True, False}
