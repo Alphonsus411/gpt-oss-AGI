@@ -82,7 +82,8 @@ class Planner:
             orquestador.
         """
         planning_state = dict(state)
-        if "qualia" not in planning_state:
+        should_govern = "task" in planning_state or "prompt" in planning_state or "instruction" in planning_state
+        if should_govern and "qualia" not in planning_state:
             planning_state, blocked = self.qualia_engine.govern_decision(
                 planning_state, phase="planning"
             )
@@ -94,7 +95,8 @@ class Planner:
                 return blocked_plan
         try:
             plan = self.orchestrator.broadcast_state(planning_state)
-            self.qualia_engine.after_decision(plan, planning_state, phase="planning")
+            if should_govern or "qualia" in planning_state:
+                self.qualia_engine.after_decision(plan, planning_state, phase="planning")
             return plan
         except Exception:  # pragma: no cover - logging side effect
             logger.exception("Error al difundir el estado")
