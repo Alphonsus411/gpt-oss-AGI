@@ -249,3 +249,43 @@ def test_meta_router_refuses_blocked_qualia_request():
             "goals": ["ok"],
             "qualia": {"blocked": True},
         })
+
+
+def test_meta_router_enriches_direct_requests_with_qualia_node():
+    from agicore_core.qualia_node import QualiaNode
+
+    router = MetaRouter(qualia_node=QualiaNode())
+    dummy = DummyModule()
+    router.register("safe", dummy, tasks=["analizar"], contexts=["ctx"], goals=["ok"])
+
+    result = router.route({"task": "analizar", "context": "ctx", "goals": ["ok"]})
+
+    assert result == "ok"
+    assert "qualia" in dummy.received
+    assert dummy.received["qualia"]["phase"] == "router"
+
+
+def test_meta_router_uses_evolutionary_recommendation_to_score_experts():
+    router = MetaRouter()
+    chosen = DummyModule()
+    other = DummyModule()
+    router.register("chosen", chosen, tasks=["t"], contexts=["c"], goals=["g"])
+    router.register("other", other, tasks=["t"], contexts=["c"], goals=["g"])
+
+    request = {
+        "task": "t",
+        "context": "c",
+        "goals": ["g"],
+        "qualia": {
+            "blocked": False,
+            "ethical_classification": "aceptable",
+            "evolutionary_signals": {
+                "recommended_action": "chosen",
+                "confidence": 1.0,
+            },
+        },
+    }
+
+    assert router.route(request) == "ok"
+    assert chosen.received is not None
+    assert other.received is None

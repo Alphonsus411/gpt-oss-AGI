@@ -72,3 +72,18 @@ Visita también la lista [awesome-gpt-oss](awesome-gpt-oss.es.md) para encontrar
 Este proyecto se distribuye bajo la Licencia Apache 2.0. Puedes encontrar el texto original en `LICENSE` y una traducción al español en `LICENSE.es`.
 
 [harmony]: https://github.com/openai/harmony
+
+## Integración AGIX/Qualia
+
+El Core fija `agix==1.9.0` y usa `agicore_core.QualiaNode` como capa rectora de planificación, enrutado y ciclo de tokens. Qualia aplica políticas ontoéticas, restricciones morales/legales, patrones cognitivos y señales evolutivas antes de que una solicitud llegue al GPT o al `MetaRouter`.
+
+Perfiles opcionales para capacidades avanzadas de AGIX:
+
+```bash
+pip install -e .[agix-neuro]   # módulos neuroinspirados de AGIX
+pip install -e .[agix-ml]      # módulos ML de AGIX
+pip install -e .[agix-data]    # integración de datos
+pip install -e .[agix-full]    # perfil completo ml+data+neuro
+```
+
+`agicore_core/config/qualia_profile.json` permite alternar entre modo seguro local, modo degradado y modo estricto (`require_agix_runtime`) cuando se requiere bloquear el arranque si AGIX 1.9.0 no está disponible.

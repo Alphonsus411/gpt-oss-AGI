@@ -40,7 +40,7 @@ class MetaRouter:
     estratégica para aprender de resultados pasados.
     """
 
-    def __init__(self, memory: Optional[StrategicMemory] = None) -> None:
+    def __init__(self, memory: Optional[StrategicMemory] = None, qualia_node: Any | None = None) -> None:
         """Inicializa el enrutador.
 
         Parameters
@@ -53,6 +53,7 @@ class MetaRouter:
 
         self._experts: Dict[str, Expert] = {}
         self._memory = memory
+        self._qualia_node = qualia_node
 
     def set_memory(self, memory: StrategicMemory) -> None:
         """Configura la memoria estratégica utilizada por el enrutador."""
@@ -154,6 +155,13 @@ class MetaRouter:
                     score -= 1
                 if classification == "nocivo":
                     score -= 100
+                evolutionary = qualia.get("evolutionary_signals", {})
+                if isinstance(evolutionary, dict):
+                    recommended = evolutionary.get("recommended_action")
+                    confidence = float(evolutionary.get("confidence", 0.0) or 0.0)
+                    if recommended and str(recommended) in {name, *expert.tasks, *expert.goals}:
+                        score += int(round(min(confidence, 1.0) * 3))
+                    score += int(round(float(evolutionary.get("neuromorphic_activation", 0.0) or 0.0)))
 
             if episodes:
                 relevant = [
@@ -195,6 +203,9 @@ class MetaRouter:
             Pesos que controlan la importancia relativa de cada tipo de
             coincidencia en la heurística de selección.
         """
+
+        if "qualia" not in request and self._qualia_node is not None:
+            request = self._qualia_node.enrich_request(request, phase="router")
 
         task = request.get("task")
         context = request.get("context")
@@ -252,6 +263,10 @@ class MetaRouter:
                         "latency": perf_counter() - start,
                         "ethical_classification": (qualia or {}).get("ethical_classification"),
                         "violated_constraints": (qualia or {}).get("violated_constraints", []),
+                        "qualia_policy_action": (qualia or {}).get("policy_action"),
+                        "qualia_legal_policy_action": (qualia or {}).get("legal_policy_action"),
+                        "qualia_ethical_evidence": (qualia or {}).get("ethical_evidence", {}),
+                        "qualia_evolutionary_signals": (qualia or {}).get("evolutionary_signals", {}),
                     },
                 )
                 self._memory.add_episode(episode)
@@ -272,6 +287,10 @@ class MetaRouter:
                     "latency": perf_counter() - start,
                     "ethical_classification": (qualia or {}).get("ethical_classification"),
                     "violated_constraints": (qualia or {}).get("violated_constraints", []),
+                    "qualia_policy_action": (qualia or {}).get("policy_action"),
+                    "qualia_legal_policy_action": (qualia or {}).get("legal_policy_action"),
+                    "qualia_ethical_evidence": (qualia or {}).get("ethical_evidence", {}),
+                    "qualia_evolutionary_signals": (qualia or {}).get("evolutionary_signals", {}),
                 },
             )
             self._memory.add_episode(episode)

@@ -7,9 +7,10 @@ pueden ser invocados por ``QualiaNode`` en cada ciclo GPT.
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping
+
+from .agix_compat import load_first_component
 
 
 @dataclass
@@ -29,39 +30,46 @@ class AgixEvolutionAdapters:
     def _load_agents(self) -> None:
         if self.enable_genetic_algorithms:
             self.genetic_agent = self._instantiate_first(
-                ("agix.agents.genetic", "GeneticAgent"),
-                ("agix.agents", "GeneticAgent"),
+                "genetic_agent",
+                (("agix.agents.genetic", "GeneticAgent"), ("agix.agents", "GeneticAgent")),
                 config=self.genetic_config or {"action_space_size": 4},
             )
         if self.enable_neuromorphic_patterns:
             self.neuromorphic_agent = self._instantiate_first(
-                ("agix.agents.neuromorphic", "NeuromorphicAgent"),
-                ("agix.agents", "NeuromorphicAgent"),
+                "neuromorphic_agent",
+                (("agix.agents.neuromorphic", "NeuromorphicAgent"), ("agix.agents", "NeuromorphicAgent")),
                 config=self.neuromorphic_config,
             )
 
     @staticmethod
     def _instantiate_first(
-        *candidates: tuple[str, str],
+        name: str,
+        candidates: tuple[tuple[str, str], ...],
         config: Mapping[str, Any] | None = None,
     ) -> Any | None:
         init_config = dict(config or {})
-        for module_name, class_name in candidates:
-            try:
-                module = importlib.import_module(module_name)
-                cls = getattr(module, class_name)
+        cls, _ = load_first_component(name, candidates)
+        if cls is None:
+            return None
+        try:
+            return cls(**init_config)
+        except TypeError:
+            if name == "genetic_agent" and "action_space_size" not in init_config:
                 try:
-                    return cls(**init_config)
-                except TypeError:
-                    if (
-                        class_name == "GeneticAgent"
-                        and "action_space_size" not in init_config
-                    ):
-                        return cls(action_space_size=4)
-                    return cls()
+                    return cls(action_space_size=4)
+                except Exception:
+                    return None
+            if name == "neuromorphic_agent":
+                try:
+                    return cls(input_size=2, output_size=2)
+                except Exception:
+                    return None
+            try:
+                return cls()
             except Exception:
-                continue
-        return None
+                return None
+        except Exception:
+            return None
 
     def enrich(self, request: Mapping[str, Any]) -> Dict[str, Any]:
         """Devuelve señales evolutivas seguras derivadas del request."""
@@ -71,15 +79,24 @@ class AgixEvolutionAdapters:
             "neuromorphic_patterns_enabled": self.enable_neuromorphic_patterns,
             "genetic_agent_active": self.genetic_agent is not None,
             "neuromorphic_agent_active": self.neuromorphic_agent is not None,
+            "recommended_action": None,
+            "confidence": 0.0,
+            "mutation_rate": 0.0,
+            "exploration_bias": 0.0,
+            "neuromorphic_activation": 0.0,
         }
         if self.genetic_agent is not None:
             for method_name in ("evolve_policy", "select_action", "act"):
                 method = getattr(self.genetic_agent, method_name, None)
                 if callable(method):
                     try:
-                        signals["genetic_signal"] = method(dict(request))
+                        signal = method(dict(request))
+                        signals["genetic_signal"] = signal
+                        self._merge_genetic_signal(signals, signal)
                     except TypeError:
-                        signals["genetic_signal"] = method()
+                        signal = method()
+                        signals["genetic_signal"] = signal
+                        self._merge_genetic_signal(signals, signal)
                     except Exception as exc:
                         signals["genetic_error"] = str(exc)
                     break
@@ -91,9 +108,8 @@ class AgixEvolutionAdapters:
         """Propaga feedback de resultado a agentes evolutivos si existen."""
 
         feedback = {"evolution_feedback_applied": False}
-        reward = (
-            1.0 if not (isinstance(result, dict) and result.get("blocked")) else -1.0
-        )
+        reward = self._calculate_reward(result, state)
+        feedback["reward"] = reward
         if self.neuromorphic_agent is not None:
             for method_name in ("update", "learn", "plasticity_update"):
                 method = getattr(self.neuromorphic_agent, method_name, None)
@@ -108,3 +124,36 @@ class AgixEvolutionAdapters:
                         feedback["neuromorphic_error"] = str(exc)
                     break
         return feedback
+
+    @staticmethod
+    def _merge_genetic_signal(signals: Dict[str, Any], signal: Any) -> None:
+        if not isinstance(signal, dict):
+            return
+        signals["recommended_action"] = signal.get(
+            "recommended_action", signal.get("selected", signals["recommended_action"])
+        )
+        for key in ("confidence", "mutation_rate", "exploration_bias", "neuromorphic_activation"):
+            if key in signal:
+                signals[key] = float(signal[key])
+
+    @staticmethod
+    def _calculate_reward(result: Any, state: Mapping[str, Any]) -> float:
+        """Calcula recompensa evolutiva a partir de seguridad, metas y métricas."""
+
+        if isinstance(result, dict) and result.get("blocked"):
+            return -1.0
+        reward = 0.2
+        classification = state.get("ethical_classification")
+        if classification in {"justo", "aceptable"}:
+            reward += 0.3
+        if state.get("violated_constraints"):
+            reward -= 0.7
+        goals = state.get("goals", [])
+        if isinstance(goals, list) and goals:
+            satisfied = sum(1 for goal in goals if state.get(str(goal)))
+            reward += min(satisfied / len(goals), 1.0) * 0.4
+        latency = float(state.get("latency", state.get("latencia", 0.0)) or 0.0)
+        reward -= min(latency, 5.0) * 0.02
+        if state.get("error"):
+            reward -= 0.4
+        return round(max(-1.0, min(1.0, reward)), 3)

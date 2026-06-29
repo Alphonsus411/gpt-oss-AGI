@@ -173,3 +173,37 @@ def test_planning_phase_is_governed_by_qualia_before_planner_runs():
     assert state["blocked"] is True
     assert state["qualia_last_phase"] == "planning"
     planner.plan.assert_not_called()
+
+
+def test_qualia_node_exposes_agix_compatibility_report():
+    node = QualiaNode(enabled=True)
+
+    request = node.enrich_request(
+        {"task": "analizar", "context": "ctx", "goals": ["done"]}, phase="step"
+    )
+
+    report = request["qualia"]["agix_compatibility_report"]
+    assert report["required_version"] == AGIX_REQUIRED_VERSION
+    assert "components" in report
+    assert "qualia_engine" in report["components"]
+
+
+def test_qualia_node_strict_mode_requires_compatible_agix(monkeypatch):
+    from agicore_core import qualia_node as qualia_module
+
+    monkeypatch.setattr(
+        qualia_module,
+        "_load_profile",
+        lambda: {
+            "agix_required_version": "0.0.0",
+            "require_agix_runtime": True,
+            "version_mismatch_policy": "block_advanced",
+        },
+    )
+
+    try:
+        QualiaNode(enabled=True)
+    except RuntimeError as exc:
+        assert "AGIX 0.0.0" in str(exc)
+    else:  # pragma: no cover - solo si el entorno coincide artificialmente
+        assert False, "QualiaNode debía exigir versión compatible en modo estricto"
