@@ -130,3 +130,28 @@ con la entrada, la salida y una copia del estado. Antes de generar un
 nuevo token, el kernel consulta la memoria con el estado actual y fusiona
 los metadatos de los episodios recuperados, permitiendo aprovechar
 experiencias pasadas en el flujo de planificación.
+
+## Gobierno central AGIX/Qualia
+
+El Core ejecuta `QualiaNode` como capa rectora antes de delegar decisiones en
+`MetaRouter` y durante el ciclo de planificación de `ReasoningKernel`. Cada
+petición queda enriquecida con:
+
+- versión AGIX detectada y política de compatibilidad;
+- políticas Qualia activas;
+- patrones cognitivos usados por el ciclo GPT;
+- restricciones morales y legales evaluadas;
+- clasificación ética y evidencia resumida;
+- estado fenomenológico producido por `QualiaEngine` cuando está disponible;
+- señales evolutivas de `GeneticAgent` y feedback neuromórfico de
+  `NeuromorphicAgent`.
+
+Si una solicitud activa una restricción de severidad `block`, el kernel no llama
+al planner ni al router. En su lugar devuelve un resultado bloqueado con
+`violated_constraints`, `legal_policy_action`, `qualia_policies` y
+`cognitive_patterns`, de modo que la memoria y las trazas puedan auditar por qué
+el GPT no ejecutó la decisión.
+
+La versión objetivo de AGIX es `1.9.0`. Si el runtime detecta otra versión, el
+perfil Qualia puede degradar o bloquear capacidades avanzadas como señales
+genéticas y patrones neuromórficos mediante `version_mismatch_policy`.

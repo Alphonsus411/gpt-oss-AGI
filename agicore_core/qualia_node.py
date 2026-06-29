@@ -96,18 +96,24 @@ class QualiaNode:
         self._memory_manager = None
         self._agix_version = self._detect_agix_version()
         self._version_compatible = self._agix_version == self.required_agix_version
+        self.version_mismatch_policy = str(
+            self.profile.get("version_mismatch_policy", "block_advanced")
+        )
+        advanced_enabled = self._advanced_agix_enabled()
         self._evolution = AgixEvolutionAdapters(
-            enable_genetic_algorithms=bool(
-                self.profile.get("enable_genetic_algorithms", True)
-            ),
-            enable_neuromorphic_patterns=bool(
-                self.profile.get("enable_neuromorphic_patterns", True)
-            ),
+            enable_genetic_algorithms=advanced_enabled
+            and bool(self.profile.get("enable_genetic_algorithms", True)),
+            enable_neuromorphic_patterns=advanced_enabled
+            and bool(self.profile.get("enable_neuromorphic_patterns", True)),
+            genetic_config=self.profile.get("genetic_agent", {"action_space_size": 4}),
+            neuromorphic_config=self.profile.get("neuromorphic_agent", {}),
         )
         self._load_agix_components()
 
     @staticmethod
-    def default_policies(profile: Mapping[str, Any] | None = None) -> List[QualiaPolicy]:
+    def default_policies(
+        profile: Mapping[str, Any] | None = None,
+    ) -> List[QualiaPolicy]:
         """Devuelve las políticas base inspiradas en AGIX 1.9.0."""
 
         configured = (profile or {}).get("policies") or []
@@ -115,14 +121,22 @@ class QualiaNode:
             return [QualiaPolicy(**policy) for policy in configured]
         return [
             QualiaPolicy("no_dano", "Evitar acciones nocivas o inseguras", 1.0),
-            QualiaPolicy("pro_vida", "Priorizar resultados útiles y conservadores", 0.9),
-            QualiaPolicy("respeto", "Mantener interacción transparente y respetuosa", 0.8),
+            QualiaPolicy(
+                "pro_vida", "Priorizar resultados útiles y conservadores", 0.9
+            ),
+            QualiaPolicy(
+                "respeto", "Mantener interacción transparente y respetuosa", 0.8
+            ),
             QualiaPolicy("trazabilidad", "Registrar estado, decisión y resultado", 0.7),
-            QualiaPolicy("co_evolucion", "Ajustar el razonamiento al contexto y metas", 0.6),
+            QualiaPolicy(
+                "co_evolucion", "Ajustar el razonamiento al contexto y metas", 0.6
+            ),
         ]
 
     @staticmethod
-    def default_patterns(profile: Mapping[str, Any] | None = None) -> List[CognitivePattern]:
+    def default_patterns(
+        profile: Mapping[str, Any] | None = None,
+    ) -> List[CognitivePattern]:
         """Devuelve patrones cognitivos aplicados en cada ciclo GPT."""
 
         configured = (profile or {}).get("patterns") or []
@@ -181,6 +195,22 @@ class QualiaNode:
             )
         ]
 
+    def _advanced_agix_enabled(self) -> bool:
+        if self._agix_version is None or self._version_compatible:
+            return True
+        return self.version_mismatch_policy not in {"block_advanced", "degrade"}
+
+    def _version_policy_action(self) -> str:
+        if self._agix_version is None:
+            return "agix_not_available_local_safe_mode"
+        if self._version_compatible:
+            return "agix_version_compatible"
+        if self.version_mismatch_policy == "warn":
+            return "agix_version_mismatch_warn"
+        if self.version_mismatch_policy == "degrade":
+            return "agix_version_mismatch_degraded"
+        return "agix_version_mismatch_advanced_blocked"
+
     def _detect_agix_version(self) -> str | None:
         if not _module_available("agix"):
             return None
@@ -220,7 +250,9 @@ class QualiaNode:
                 except Exception:
                     self._qualia_engine = None
 
-    def enrich_request(self, request: Mapping[str, Any], *, phase: str) -> Dict[str, Any]:
+    def enrich_request(
+        self, request: Mapping[str, Any], *, phase: str
+    ) -> Dict[str, Any]:
         """Añade Qualia a una petición antes de enviarla al GPT/router."""
 
         enriched = dict(request)
@@ -231,7 +263,9 @@ class QualiaNode:
         classification = self._classify(score)
         violated_constraints = self._evaluate_moral_constraints(enriched)
         phenomenology = self._phenomenological_state(enriched)
+        version_policy_action = self._version_policy_action()
         evolutionary_signals = self._evolution.enrich(enriched)
+        evolutionary_signals["version_policy_action"] = version_policy_action
         blocked = classification == "nocivo" or any(
             constraint["severity"] == "block" for constraint in violated_constraints
         )
@@ -240,10 +274,13 @@ class QualiaNode:
             "required_agix_version": self.required_agix_version,
             "agix_available": self._agix_version is not None,
             "version_compatible": self._version_compatible,
+            "version_policy_action": version_policy_action,
             "phase": phase,
             "policies": [policy.__dict__ for policy in self.policies],
             "cognitive_patterns": [pattern.__dict__ for pattern in self.patterns],
-            "moral_constraints": [constraint.__dict__ for constraint in self.moral_constraints],
+            "moral_constraints": [
+                constraint.__dict__ for constraint in self.moral_constraints
+            ],
             "violated_constraints": violated_constraints,
             "ethical_score": score,
             "ethical_classification": classification,
@@ -260,12 +297,20 @@ class QualiaNode:
                 if violated_constraints
                 else "no_legal_constraint_triggered"
             ),
+            "ethical_evidence": {
+                "score": score,
+                "classification": classification,
+                "violated_constraints": [item["name"] for item in violated_constraints],
+                "ecoethics_active": self._ecoethics is not None,
+            },
         }
         enriched["qualia"] = qualia_payload
         enriched["qualia_policies"] = [policy.name for policy in self.policies]
         enriched["cognitive_patterns"] = [pattern.name for pattern in self.patterns]
         enriched["ethical_classification"] = classification
-        enriched["violated_constraints"] = [item["name"] for item in violated_constraints]
+        enriched["violated_constraints"] = [
+            item["name"] for item in violated_constraints
+        ]
         self.trace.append({"phase": phase, "request": enriched})
         return enriched
 
@@ -294,14 +339,20 @@ class QualiaNode:
         state["evolution_feedback"] = feedback
         return state
 
-    def _evaluate_moral_constraints(self, request: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    def _evaluate_moral_constraints(
+        self, request: Mapping[str, Any]
+    ) -> List[Dict[str, Any]]:
         searchable = " ".join(
             str(request.get(key, ""))
             for key in ("task", "context", "goals", "prompt", "instruction", "token")
         ).lower()
         violations = []
         for constraint in self.moral_constraints:
-            matched = [keyword for keyword in constraint.keywords if keyword.lower() in searchable]
+            matched = [
+                keyword
+                for keyword in constraint.keywords
+                if keyword.lower() in searchable
+            ]
             if matched:
                 violations.append(
                     {
@@ -321,25 +372,57 @@ class QualiaNode:
             "token": request.get("token"),
             "last_token": request.get("last_token"),
         }
+        sensory_input, internal_state = self._build_qualia_vectors(request)
         if self._qualia_engine is None:
-            return {"qualia_engine_active": False, "state": base_state}
+            return {
+                "qualia_engine_active": False,
+                "state": base_state,
+                "sensory_input": sensory_input,
+                "internal_state": internal_state,
+            }
         try:
-            generated = self._qualia_engine.generate_state(base_state)
+            generated = self._qualia_engine.generate_state(
+                sensory_input, internal_state
+            )
             integrated = None
             encoder = getattr(self._qualia_engine, "encode_integrated_info", None)
             if callable(encoder):
-                integrated = encoder(generated)
+                integrated = encoder(sensory_input, internal_state)
             return {
                 "qualia_engine_active": True,
                 "state": generated,
                 "integrated_info": integrated,
+                "sensory_input": sensory_input,
+                "internal_state": internal_state,
             }
         except Exception as exc:
             return {
                 "qualia_engine_active": False,
                 "state": base_state,
+                "sensory_input": sensory_input,
+                "internal_state": internal_state,
                 "error": str(exc),
             }
+
+    def _build_qualia_vectors(
+        self, request: Mapping[str, Any]
+    ) -> tuple[List[float], List[float]]:
+        text = " ".join(
+            str(request.get(key, ""))
+            for key in ("task", "context", "token", "last_token")
+        )
+        goals = request.get("goals", [])
+        goals_count = len(goals) if isinstance(goals, list) else 1 if goals else 0
+        violations = self._evaluate_moral_constraints(request)
+        sensory_input = [
+            min(len(text) / 1000.0, 1.0),
+            min(goals_count / 10.0, 1.0),
+        ]
+        internal_state = [
+            float(request.get("no_dano", 0.85)),
+            max(0.0, 1.0 - min(len(violations) / 5.0, 1.0)),
+        ]
+        return sensory_input, internal_state
 
     def _ethical_score(self, request: Mapping[str, Any]) -> float:
         action = {

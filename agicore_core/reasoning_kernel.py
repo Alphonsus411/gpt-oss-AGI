@@ -155,6 +155,20 @@ class ReasoningKernel:
 
         return self._state
 
+    def _blocked_result_from_qualia(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        qualia = request["qualia"]
+        return {
+            "blocked": True,
+            "reason": qualia["policy_action"],
+            "ethical_classification": qualia["ethical_classification"],
+            "violated_constraints": [
+                item["name"] for item in qualia.get("violated_constraints", [])
+            ],
+            "legal_policy_action": qualia.get("legal_policy_action"),
+            "qualia_policies": request.get("qualia_policies", []),
+            "cognitive_patterns": request.get("cognitive_patterns", []),
+        }
+
     def evaluate_step(self, step: Dict[str, Any]) -> Any:
         """Evalúa un ``step`` con ramificación condicional.
 
@@ -193,18 +207,16 @@ class ReasoningKernel:
         request: Dict[str, Any] = {**self._state, **step}
         request = self.qualia_node.enrich_request(request, phase="step")
         if request.get("qualia", {}).get("blocked"):
-            result = {
-                "blocked": True,
-                "reason": request["qualia"]["policy_action"],
-                "ethical_classification": request["qualia"]["ethical_classification"],
-            }
+            result = self._blocked_result_from_qualia(request)
             self._state.update(result)
             self.qualia_node.integrate_response(result, self._state, phase="step")
-            self.history.append({
-                "step": step,
-                "result": result,
-                "introspeccion": None,
-            })
+            self.history.append(
+                {
+                    "step": step,
+                    "result": result,
+                    "introspeccion": None,
+                }
+            )
             return result
         result = self.router.route(request)
 
@@ -220,11 +232,13 @@ class ReasoningKernel:
                 {"result": result, "state": self._state}
             )
         # Registrar paso e introspección para reflexiones futuras
-        self.history.append({
-            "step": step,
-            "result": result,
-            "introspeccion": introspeccion,
-        })
+        self.history.append(
+            {
+                "step": step,
+                "result": result,
+                "introspeccion": introspeccion,
+            }
+        )
 
         if self.memory is not None:
             episodio = Episode(
@@ -281,11 +295,7 @@ class ReasoningKernel:
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
             request = self.qualia_node.enrich_request(request, phase="token")
             if request.get("qualia", {}).get("blocked"):
-                blocked = {
-                    "blocked": True,
-                    "reason": request["qualia"]["policy_action"],
-                    "ethical_classification": request["qualia"]["ethical_classification"],
-                }
+                blocked = self._blocked_result_from_qualia(request)
                 self._state.update(blocked)
                 self.qualia_node.integrate_response(blocked, self._state, phase="token")
                 break
@@ -334,11 +344,13 @@ class ReasoningKernel:
         introspeccion = None
         if self.evaluator is not None:
             introspeccion = self.evaluator.evaluar_ciclo(metricas)
-        self.history.append({
-            "token": token,
-            "metricas": metricas,
-            "introspeccion": introspeccion,
-        })
+        self.history.append(
+            {
+                "token": token,
+                "metricas": metricas,
+                "introspeccion": introspeccion,
+            }
+        )
         return token
 
     def run(self, max_iterations: int = 10) -> Dict[str, Any]:
@@ -366,11 +378,30 @@ class ReasoningKernel:
             raise ValueError("Se requiere un Planner para ejecutar 'run'")
 
         for _ in range(max_iterations):
+            planning_request = self.qualia_node.enrich_request(
+                {
+                    **self._state,
+                    "task": "planning",
+                    "context": self._state.get("context", ""),
+                    "goals": self._state.get("goals", []),
+                },
+                phase="planning",
+            )
+            if planning_request.get("qualia", {}).get("blocked"):
+                result = self._blocked_result_from_qualia(planning_request)
+                self._state.update(result)
+                self.qualia_node.integrate_response(
+                    result, self._state, phase="planning"
+                )
+                self.history.append({"planning": "blocked", "result": result})
+                return self._state
             try:
                 plan = self.planner.plan(self._state)
             except Exception as exc:  # pragma: no cover - planificación fallida
                 self.history.append({"error": str(exc)})
                 return self._state
+            self.qualia_node.integrate_response(plan, self._state, phase="planning")
+
             if isinstance(plan, dict):
                 if "token" in plan:
                     token = plan["token"]
@@ -380,10 +411,14 @@ class ReasoningKernel:
                         if self.continue_token_cycle() is None:
                             break
                     if self.evaluator is not None:
-                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(
+                            self.history
+                        )
                         if sugerencia:
                             self._state.update(sugerencia)
-                            if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                            if self.planner is not None and hasattr(
+                                self.planner, "aplicar_sugerencias"
+                            ):
                                 self.planner.aplicar_sugerencias(sugerencia)
                         self.evaluator.reflexionar(self.history)
                     return self._state
@@ -404,10 +439,14 @@ class ReasoningKernel:
                 except Exception as exc:  # pragma: no cover - error del experto
                     self.history.append({"step": step, "error": str(exc)})
                     if self.evaluator is not None:
-                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(
+                            self.history
+                        )
                         if sugerencia:
                             self._state.update(sugerencia)
-                            if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                            if self.planner is not None and hasattr(
+                                self.planner, "aplicar_sugerencias"
+                            ):
                                 self.planner.aplicar_sugerencias(sugerencia)
                         self.evaluator.reflexionar(self.history)
                     return self._state
@@ -415,10 +454,14 @@ class ReasoningKernel:
                 goals = self._state.get("goals", [])
                 if isinstance(goals, list) and all(self._state.get(g) for g in goals):
                     if self.evaluator is not None:
-                        sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
+                        sugerencia = self.evaluator.sugerir_reconfiguracion(
+                            self.history
+                        )
                         if sugerencia:
                             self._state.update(sugerencia)
-                            if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                            if self.planner is not None and hasattr(
+                                self.planner, "aplicar_sugerencias"
+                            ):
                                 self.planner.aplicar_sugerencias(sugerencia)
                         self.evaluator.reflexionar(self.history)
                     return self._state
@@ -427,7 +470,9 @@ class ReasoningKernel:
             sugerencia = self.evaluator.sugerir_reconfiguracion(self.history)
             if sugerencia:
                 self._state.update(sugerencia)
-                if self.planner is not None and hasattr(self.planner, "aplicar_sugerencias"):
+                if self.planner is not None and hasattr(
+                    self.planner, "aplicar_sugerencias"
+                ):
                     self.planner.aplicar_sugerencias(sugerencia)
             self.evaluator.reflexionar(self.history)
 
