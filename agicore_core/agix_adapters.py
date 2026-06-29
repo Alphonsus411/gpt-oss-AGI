@@ -74,11 +74,13 @@ class AgixEvolutionAdapters:
     def enrich(self, request: Mapping[str, Any]) -> Dict[str, Any]:
         """Devuelve señales evolutivas seguras derivadas del request."""
 
+        contract = self.validate_runtime_contract()
         signals: Dict[str, Any] = {
             "genetic_algorithms_enabled": self.enable_genetic_algorithms,
             "neuromorphic_patterns_enabled": self.enable_neuromorphic_patterns,
             "genetic_agent_active": self.genetic_agent is not None,
             "neuromorphic_agent_active": self.neuromorphic_agent is not None,
+            "agix_runtime_contract": contract,
             "recommended_action": None,
             "confidence": 0.0,
             "mutation_rate": 0.0,
@@ -130,9 +132,50 @@ class AgixEvolutionAdapters:
     ) -> Dict[str, Any]:
         """Propaga feedback de resultado a agentes evolutivos si existen."""
 
-        feedback = {"evolution_feedback_applied": False}
+        feedback = {
+            "evolution_feedback_applied": False,
+            "genetic_feedback_applied": False,
+            "neuromorphic_feedback_applied": False,
+        }
         reward = self._calculate_reward(result, state)
         feedback["reward"] = reward
+        feedback_payload = {
+            "result": result,
+            "reward": reward,
+            "state": dict(state),
+            "ethical_classification": state.get("ethical_classification"),
+            "violated_constraints": state.get("violated_constraints", []),
+            "goals": state.get("goals", []),
+        }
+        if self.genetic_agent is not None:
+            for method_name in (
+                "learn",
+                "update",
+                "evolve",
+                "reward",
+                "fit",
+                "integrate_feedback",
+            ):
+                method = getattr(self.genetic_agent, method_name, None)
+                if callable(method):
+                    try:
+                        update_result = method(feedback_payload)
+                        feedback["evolution_feedback_applied"] = True
+                        feedback["genetic_feedback_applied"] = True
+                        feedback["genetic_feedback_method"] = method_name
+                        self._merge_genetic_feedback(feedback, update_result)
+                    except TypeError:
+                        try:
+                            update_result = method(dict(state), reward)
+                        except TypeError:
+                            update_result = method(reward)
+                        feedback["evolution_feedback_applied"] = True
+                        feedback["genetic_feedback_applied"] = True
+                        feedback["genetic_feedback_method"] = method_name
+                        self._merge_genetic_feedback(feedback, update_result)
+                    except Exception as exc:
+                        feedback["genetic_error"] = str(exc)
+                    break
         if self.neuromorphic_agent is not None:
             for method_name in ("update", "learn", "plasticity_update"):
                 method = getattr(self.neuromorphic_agent, method_name, None)
@@ -140,15 +183,88 @@ class AgixEvolutionAdapters:
                     try:
                         update_result = method(dict(state), reward)
                         feedback["evolution_feedback_applied"] = True
+                        feedback["neuromorphic_feedback_applied"] = True
                         self._merge_neuromorphic_feedback(feedback, update_result)
                     except TypeError:
                         update_result = method(reward)
                         feedback["evolution_feedback_applied"] = True
+                        feedback["neuromorphic_feedback_applied"] = True
                         self._merge_neuromorphic_feedback(feedback, update_result)
                     except Exception as exc:
                         feedback["neuromorphic_error"] = str(exc)
                     break
         return feedback
+
+    def validate_runtime_contract(self) -> Dict[str, Any]:
+        """Devuelve el contrato AGIX activo y sus degradaciones auditables."""
+
+        genetic_methods = ("evolve_policy", "select_action", "act")
+        genetic_feedback_methods = (
+            "learn",
+            "update",
+            "evolve",
+            "reward",
+            "fit",
+            "integrate_feedback",
+        )
+        neuromorphic_methods = ("activate", "forward", "infer", "decide", "process")
+        neuromorphic_feedback_methods = ("update", "learn", "plasticity_update")
+        return {
+            "genetic": self._component_contract(
+                self.genetic_agent,
+                enabled=self.enable_genetic_algorithms,
+                decision_methods=genetic_methods,
+                feedback_methods=genetic_feedback_methods,
+            ),
+            "neuromorphic": self._component_contract(
+                self.neuromorphic_agent,
+                enabled=self.enable_neuromorphic_patterns,
+                decision_methods=neuromorphic_methods,
+                feedback_methods=neuromorphic_feedback_methods,
+            ),
+        }
+
+    @staticmethod
+    def _component_contract(
+        agent: Any | None,
+        *,
+        enabled: bool,
+        decision_methods: tuple[str, ...],
+        feedback_methods: tuple[str, ...],
+    ) -> Dict[str, Any]:
+        decision_available = (
+            tuple(
+                method
+                for method in decision_methods
+                if callable(getattr(agent, method, None))
+            )
+            if agent is not None
+            else ()
+        )
+        feedback_available = (
+            tuple(
+                method
+                for method in feedback_methods
+                if callable(getattr(agent, method, None))
+            )
+            if agent is not None
+            else ()
+        )
+        degradations = []
+        if enabled and agent is None:
+            degradations.append("agent_not_available")
+        if agent is not None and not decision_available:
+            degradations.append("decision_method_missing")
+        if agent is not None and not feedback_available:
+            degradations.append("feedback_method_missing")
+        return {
+            "enabled": enabled,
+            "active": agent is not None,
+            "decision_methods": list(decision_available),
+            "feedback_methods": list(feedback_available),
+            "degraded": bool(degradations),
+            "degradations": degradations,
+        }
 
     @staticmethod
     def _build_neuromorphic_input(
@@ -217,6 +333,25 @@ class AgixEvolutionAdapters:
             numeric = [float(value) for value in signal if isinstance(value, (int, float))]
             if numeric:
                 signals["neuromorphic_activation"] = sum(numeric) / len(numeric)
+
+    @staticmethod
+    def _merge_genetic_feedback(feedback: Dict[str, Any], result: Any) -> None:
+        if not isinstance(result, dict):
+            if result is not None:
+                feedback["genetic_policy_update"] = result
+            return
+        for key in (
+            "genetic_policy_update",
+            "policy_update",
+            "selected_policy",
+            "mutation_rate",
+            "crossover_rate",
+            "reward",
+        ):
+            if key in result:
+                feedback[
+                    key if key != "policy_update" else "genetic_policy_update"
+                ] = result[key]
 
     @staticmethod
     def _merge_neuromorphic_feedback(feedback: Dict[str, Any], result: Any) -> None:

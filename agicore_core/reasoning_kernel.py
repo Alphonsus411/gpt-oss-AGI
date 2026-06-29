@@ -215,7 +215,7 @@ class ReasoningKernel:
         request: Dict[str, Any] = {**self._state, **step}
         request = self.qualia_engine.before_decision(request, phase="step")
         self._apply_qualia_request_metadata(request)
-        if self.qualia_engine.is_blocked(request):
+        if self.qualia_engine.must_block(request):
             result = self._blocked_result_from_qualia(request)
             self._state.update(result)
             self.qualia_engine.after_decision(result, self._state, phase="step")
@@ -312,7 +312,7 @@ class ReasoningKernel:
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
             request = self.qualia_engine.before_decision(request, phase="token")
             self._apply_qualia_request_metadata(request)
-            if self.qualia_engine.is_blocked(request):
+            if self.qualia_engine.must_block(request):
                 blocked = self._blocked_result_from_qualia(request)
                 self._state.update(blocked)
                 self.qualia_engine.after_decision(blocked, self._state, phase="token")
@@ -414,7 +414,7 @@ class ReasoningKernel:
                 phase="planning",
             )
             self._apply_qualia_request_metadata(planning_request)
-            if self.qualia_engine.is_blocked(planning_request):
+            if self.qualia_engine.must_block(planning_request):
                 result = self._blocked_result_from_qualia(planning_request)
                 self._state.update(result)
                 self.qualia_engine.after_decision(

@@ -13,8 +13,11 @@ class FakeTokenizer:
 class FakeGenerator:
     def __init__(self):
         self.started = False
+        self.generate_called = False
 
     def generate(self, *args, **kwargs):
+        self.generate_called = True
+
         def stream():
             self.started = True
             yield 1, -0.1
@@ -44,6 +47,7 @@ def test_qualia_wrapper_blocks_before_backend_iteration():
         )
     )
 
+    assert fake.generate_called is False
     assert fake.started is False
     assert events[0][2]["blocked"] is True
 
@@ -70,5 +74,6 @@ def test_qualia_wrapper_yields_safe_token_and_records_feedback():
         )
     )
 
+    assert fake.generate_called is True
     assert fake.started is True
     assert events == [(1, -0.1, None)]

@@ -127,3 +127,69 @@ def test_neuromorphic_input_matches_configured_size(monkeypatch):
     assert created["shape"] == (2, 1)
     assert len(created["vector"]) == 2
     assert signals["neuromorphic_input_size"] == 2
+
+
+def test_genetic_agent_receives_feedback_payload(monkeypatch):
+    received = {}
+    agix = types.ModuleType("agix")
+    agents = types.ModuleType("agix.agents")
+    genetic = types.ModuleType("agix.agents.genetic")
+
+    class GeneticAgent:
+        def __init__(self, action_space_size):
+            self.action_space_size = action_space_size
+
+        def select_action(self, request):
+            return {"selected": request.get("task")}
+
+        def learn(self, payload):
+            received.update(payload)
+            return {"policy_update": "safe_policy", "mutation_rate": 0.1}
+
+    genetic.GeneticAgent = GeneticAgent
+    monkeypatch.setitem(sys.modules, "agix", agix)
+    monkeypatch.setitem(sys.modules, "agix.agents", agents)
+    monkeypatch.setitem(sys.modules, "agix.agents.genetic", genetic)
+
+    adapters = AgixEvolutionAdapters(
+        enable_genetic_algorithms=True,
+        enable_neuromorphic_patterns=False,
+        genetic_config={"action_space_size": 4},
+    )
+    feedback = adapters.integrate_feedback(
+        {"done": True},
+        {"goals": ["done"], "done": True, "ethical_classification": "aceptable"},
+    )
+
+    assert received["result"] == {"done": True}
+    assert received["ethical_classification"] == "aceptable"
+    assert feedback["genetic_feedback_applied"] is True
+    assert feedback["genetic_policy_update"] == "safe_policy"
+
+
+def test_runtime_contract_reports_degraded_agent_without_feedback(monkeypatch):
+    agix = types.ModuleType("agix")
+    agents = types.ModuleType("agix.agents")
+    genetic = types.ModuleType("agix.agents.genetic")
+
+    class GeneticAgent:
+        def __init__(self, action_space_size):
+            pass
+
+        def select_action(self, request):
+            return {"selected": request.get("task")}
+
+    genetic.GeneticAgent = GeneticAgent
+    monkeypatch.setitem(sys.modules, "agix", agix)
+    monkeypatch.setitem(sys.modules, "agix.agents", agents)
+    monkeypatch.setitem(sys.modules, "agix.agents.genetic", genetic)
+
+    adapters = AgixEvolutionAdapters(
+        enable_genetic_algorithms=True,
+        enable_neuromorphic_patterns=False,
+    )
+    contract = adapters.validate_runtime_contract()
+
+    assert contract["genetic"]["active"] is True
+    assert contract["genetic"]["degraded"] is True
+    assert "feedback_method_missing" in contract["genetic"]["degradations"]

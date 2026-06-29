@@ -299,3 +299,43 @@ def test_reasoning_kernel_persists_qualia_request_metadata_in_state():
     assert state["ethical_classification"] in {"justo", "aceptable", "cuestionable", "nocivo"}
     assert "qualia_evolutionary_signals" in state
     assert "qualia_decision_audit" in state
+
+
+def test_qualia_node_uses_agix_moral_evaluator_as_binding_policy():
+    class MoralEvaluatorStub:
+        def evaluate(self, request):
+            return {
+                "classification": "illegal",
+                "blocked": True,
+                "category": "ilegalidad",
+            }
+
+    node = QualiaNode(enabled=True)
+    node._moral_evaluator = MoralEvaluatorStub()
+
+    request = node.enrich_request(
+        {"task": "petición aparentemente neutra", "context": "ctx"}, phase="step"
+    )
+
+    assert request["qualia"]["blocked"] is True
+    assert request["qualia"]["moral_decision"]["allowed"] is False
+    assert (
+        request["qualia"]["legal_policy_action"]
+        == "blocked_illegal_or_unsafe_decision"
+    )
+    sources = {
+        evidence["source"]
+        for violation in request["qualia"]["violated_constraints"]
+        for evidence in violation.get("evidence", [])
+    }
+    assert "agix_moral_evaluator" in sources
+
+
+def test_qualia_node_exposes_evolution_contract_in_compatibility_payload():
+    node = QualiaNode(enabled=True)
+
+    request = node.enrich_request({"task": "analizar", "context": "ctx"}, phase="step")
+
+    report = request["qualia"]["agix_compatibility_report"]
+    assert report["runtime_profile"] == "local_safe"
+    assert "evolution_contract" in report

@@ -23,14 +23,7 @@ class QualiaControlledTokenGenerator:
 
     def generate(self, tokens, *, prompt_state, temperature, limit):
         decoded_text = prompt_state.get("prompt", "")
-        stream = self.generator.generate(
-            tokens,
-            stop_tokens=[self.tokenizer.eot_token],
-            temperature=temperature,
-            max_tokens=limit,
-            return_logprobs=True,
-        )
-        stream = iter(stream)
+        stream = None
         while True:
             pre_state, blocked = self.qualia_engine.govern_decision(
                 {
@@ -47,6 +40,16 @@ class QualiaControlledTokenGenerator:
                 )
                 yield None, None, blocked
                 return
+
+            if stream is None:
+                stream = self.generator.generate(
+                    tokens,
+                    stop_tokens=[self.tokenizer.eot_token],
+                    temperature=temperature,
+                    max_tokens=limit,
+                    return_logprobs=True,
+                )
+                stream = iter(stream)
 
             try:
                 token, logprob = next(stream)
