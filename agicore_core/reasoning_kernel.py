@@ -14,6 +14,7 @@ from gpt_oss.strategic_memory import Episode, StrategicMemory
 
 from .planner import Planner
 from .meta_evaluator import MetaEvaluator
+from .qualia_node import QualiaNode
 
 logger = logging.getLogger(__name__)
 
@@ -126,11 +127,13 @@ class ReasoningKernel:
         router: MetaRouter,
         evaluator: MetaEvaluator | None = None,
         memory: StrategicMemory | None = None,
+        qualia_node: QualiaNode | None = None,
     ) -> None:
         self.planner = planner
         self.router = router
         self.evaluator = evaluator
         self.memory = memory
+        self.qualia_node = qualia_node or QualiaNode()
         self._state: Dict[str, Any] = {}
         self.history: List[Dict[str, Any]] = []
         self._token_generator: Iterator[Any] | None = None
@@ -181,12 +184,14 @@ class ReasoningKernel:
             step.update(branch)
 
         request: Dict[str, Any] = {**self._state, **step}
+        request = self.qualia_node.enrich_request(request, phase="step")
         result = self.router.route(request)
 
         if isinstance(result, dict):
             self._state.update(result)
         else:
             self._state["result"] = result
+        self.qualia_node.integrate_response(result, self._state, phase="step")
 
         introspeccion = None
         if self.evaluator is not None:
@@ -247,6 +252,7 @@ class ReasoningKernel:
                     }
                     self._state.update(metadata_filtrada)
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
+            request = self.qualia_node.enrich_request(request, phase="token")
             siguiente = self.router.route(request)
             if siguiente is None:
                 break
@@ -260,6 +266,7 @@ class ReasoningKernel:
                 )
                 self.memory.add_episode(episodio)
             self._state["last_token"] = siguiente
+            self.qualia_node.integrate_response(siguiente, self._state, phase="token")
             yield siguiente
             count += 1
             token = siguiente

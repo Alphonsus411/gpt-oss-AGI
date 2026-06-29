@@ -10,12 +10,15 @@ from typing import Any, Dict, List
 
 from meta_router import MetaRouter
 
+from .qualia_node import QualiaNode
+
 
 class ReasoningKernel:
     """Ejecuta pasos de razonamiento usando un enrutador externo."""
 
-    def __init__(self, router: MetaRouter) -> None:
+    def __init__(self, router: MetaRouter, qualia_node: QualiaNode | None = None) -> None:
         self.router = router
+        self.qualia_node = qualia_node or QualiaNode()
 
     def execute_step(
         self,
@@ -46,8 +49,9 @@ class ReasoningKernel:
 
         request = {"task": task, "context": context, "goals": goals}
         request.update(step)
+        request = self.qualia_node.enrich_request(request, phase="kernel_step")
         try:
-            return self.router.route(
+            result = self.router.route(
                 request,
                 weight_task=weight_task,
                 weight_context=weight_context,
@@ -55,7 +59,10 @@ class ReasoningKernel:
             )
         except TypeError:
             # Algunos ``MetaRouter`` de pruebas no aceptan pesos heurísticos
-            return self.router.route(request)
+            result = self.router.route(request)
+        state: Dict[str, Any] = {}
+        self.qualia_node.integrate_response(result, state, phase="kernel_step")
+        return result
 
     def execute_plan(
         self,
