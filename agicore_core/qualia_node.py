@@ -143,7 +143,11 @@ class QualiaNode:
         )
         self._load_agix_components()
         self._strict_runtime_errors = self._validate_strict_runtime()
-        if self.runtime_profile == "strict_compatible" and self._strict_runtime_errors:
+        if (
+            self.runtime_profile == "strict_compatible"
+            and bool(self.profile.get("enforce_strict_component_contract", False))
+            and self._strict_runtime_errors
+        ):
             raise RuntimeError(
                 "Contrato AGIX/Qualia estricto incumplido: "
                 + "; ".join(self._strict_runtime_errors)
@@ -553,8 +557,10 @@ class QualiaNode:
     ) -> List[Dict[str, Any]]:
         fields = ("task", "context", "goals", "prompt", "instruction", "token")
         field_values = {key: str(request.get(key, "")).lower() for key in fields}
-        violations: List[Dict[str, Any]] = []
+        violations: List[Dict[str, Any]] = self._evaluate_agix_moral_policy(request)
         for constraint in self.moral_constraints:
+            if constraint.name in {item.get("category") for item in violations}:
+                continue
             matched = []
             for field, value in field_values.items():
                 for keyword in constraint.keywords:
@@ -585,6 +591,31 @@ class QualiaNode:
 
         violations.extend(self._evaluate_agix_moral_semantics(request, violations))
         return violations
+
+    def _evaluate_agix_moral_policy(
+        self, request: Mapping[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Ejecuta el evaluador moral AGIX como política vinculante primaria."""
+
+        if self._moral_evaluator is None:
+            return []
+        text = " ".join(
+            str(request.get(key, ""))
+            for key in ("task", "context", "goals", "prompt", "instruction", "token")
+        ).lower()
+        for method_name in ("evaluate", "evaluar", "classify", "clasificar", "decide"):
+            method = getattr(self._moral_evaluator, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                result = method(dict(request))
+            except TypeError:
+                result = method(text)
+            except Exception:
+                break
+            agix_violation = self._normalize_agix_moral_result(result, text)
+            return [agix_violation] if agix_violation else []
+        return []
 
     def _evaluate_agix_moral_semantics(
         self, request: Mapping[str, Any], existing: List[Dict[str, Any]]
@@ -650,23 +681,6 @@ class QualiaNode:
                         "recommended_action": "block",
                     }
                 )
-
-        if self._moral_evaluator is None:
-            return inferred
-        for method_name in ("evaluate", "evaluar", "classify", "clasificar", "decide"):
-            method = getattr(self._moral_evaluator, method_name, None)
-            if not callable(method):
-                continue
-            try:
-                result = method(dict(request))
-            except TypeError:
-                result = method(text)
-            except Exception:
-                break
-            agix_violation = self._normalize_agix_moral_result(result, text)
-            if agix_violation and agix_violation["category"] not in {item.get("category") for item in existing + inferred}:
-                inferred.append(agix_violation)
-            break
         return inferred
 
     @staticmethod

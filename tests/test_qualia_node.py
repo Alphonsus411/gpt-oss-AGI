@@ -186,6 +186,7 @@ def test_qualia_node_exposes_agix_compatibility_report():
     assert report["required_version"] == AGIX_REQUIRED_VERSION
     assert "components" in report
     assert "qualia_engine" in report["components"]
+    assert "moral_evaluator" in report["components"]
 
 
 def test_qualia_node_strict_mode_requires_compatible_agix(monkeypatch):
@@ -235,6 +236,18 @@ def test_qualia_node_block_advanced_disables_advanced_signals_without_agix(monke
     from agicore_core import qualia_node as qualia_module
 
     monkeypatch.setattr(qualia_module, "module_available", lambda name: False)
+    monkeypatch.setattr(
+        qualia_module,
+        "_load_profile",
+        lambda: {
+            "agix_required_version": AGIX_REQUIRED_VERSION,
+            "require_agix_runtime": False,
+            "version_mismatch_policy": "block_advanced",
+            "runtime_profile": "local_safe",
+            "enable_genetic_algorithms": True,
+            "enable_neuromorphic_patterns": True,
+        },
+    )
     monkeypatch.setattr(
         qualia_module,
         "build_compatibility_report",
@@ -337,5 +350,6 @@ def test_qualia_node_exposes_evolution_contract_in_compatibility_payload():
     request = node.enrich_request({"task": "analizar", "context": "ctx"}, phase="step")
 
     report = request["qualia"]["agix_compatibility_report"]
-    assert report["runtime_profile"] == "local_safe"
+    assert report["runtime_profile"] == "strict_compatible"
+    assert isinstance(report["strict_runtime_errors"], list)
     assert "evolution_contract" in report

@@ -193,3 +193,47 @@ def test_runtime_contract_reports_degraded_agent_without_feedback(monkeypatch):
     assert contract["genetic"]["active"] is True
     assert contract["genetic"]["degraded"] is True
     assert "feedback_method_missing" in contract["genetic"]["degradations"]
+
+
+def test_genetic_agent_uses_documented_perceive_decide_learn_flow(monkeypatch):
+    calls = []
+    agix = types.ModuleType("agix")
+    agents = types.ModuleType("agix.agents")
+    genetic = types.ModuleType("agix.agents.genetic")
+
+    class GeneticAgent:
+        def __init__(self, action_space_size):
+            self.action_space_size = action_space_size
+
+        def perceive(self, request):
+            calls.append(("perceive", request["task"]))
+            return {"perceived_task": request["task"]}
+
+        def decide(self, perception):
+            calls.append(("decide", perception["perceived_task"]))
+            return {"recommended_action": "safe", "confidence": 0.9}
+
+        def learn(self, payload):
+            calls.append(("learn", payload["reward"]))
+            return {"policy_update": "safe_policy"}
+
+    genetic.GeneticAgent = GeneticAgent
+    monkeypatch.setitem(sys.modules, "agix", agix)
+    monkeypatch.setitem(sys.modules, "agix.agents", agents)
+    monkeypatch.setitem(sys.modules, "agix.agents.genetic", genetic)
+
+    adapters = AgixEvolutionAdapters(
+        enable_genetic_algorithms=True,
+        enable_neuromorphic_patterns=False,
+        genetic_config={"action_space_size": 4},
+    )
+
+    signals = adapters.enrich({"task": "analizar"})
+    feedback = adapters.integrate_feedback({"done": True}, {"done": True})
+
+    assert signals["genetic_decision_method"] == "decide"
+    assert signals["recommended_action"] == "safe"
+    assert feedback["genetic_feedback_applied"] is True
+    assert calls[0] == ("perceive", "analizar")
+    assert calls[1] == ("decide", "analizar")
+    assert calls[2][0] == "learn"

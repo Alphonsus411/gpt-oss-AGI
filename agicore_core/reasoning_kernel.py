@@ -63,6 +63,17 @@ _ALLOWED_METADATA_KEYS = {
     "violated_constraints",
     "agix_version",
     "agix_version_compatible",
+    "agix_compatibility_report",
+    "qualia_decision_audit",
+    "qualia_evolutionary_signals",
+    "evolution_feedback",
+    "qualia_genetic_feedback",
+    "qualia_neuromorphic_feedback",
+    "qualia_phase",
+    "qualia_policy_action",
+    "qualia_legal_policy_action",
+    "qualia_ethical_evidence",
+    "qualia_engine_active",
 }
 
 

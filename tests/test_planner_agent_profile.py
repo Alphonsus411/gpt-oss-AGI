@@ -46,4 +46,7 @@ def test_planner_acepta_orquestador_explicito_sin_importar_agix(monkeypatch):
 
     planificador = planner_module.Planner(orchestrator=DummyOrchestrator())
 
-    assert planificador.plan({"goal": "test"}) == [{"state": {"goal": "test"}}]
+    plan = planificador.plan({"goal": "test"})
+
+    assert plan[0]["state"]["goal"] == "test"
+    assert plan[0]["state"]["qualia"]["phase"] == "planning"

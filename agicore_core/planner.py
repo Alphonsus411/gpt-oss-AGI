@@ -15,6 +15,7 @@ import json
 import logging
 from pathlib import Path
 
+from .config import AGIX_REQUIRED_VERSION
 from .qualia_engine import CoreQualiaEngine
 
 logger = logging.getLogger(__name__)
@@ -27,15 +28,15 @@ def _load_virtual_qualia() -> type[Any]:
         orchestrator = importlib.import_module("agix.orchestrator")
     except ImportError as exc:
         raise RuntimeError(
-            "AGIX 1.9.0 es necesario para crear Planner sin un orquestador "
-            "explícito. Instala 'agix==1.9.0' o proporciona un objeto con "
+            f"AGIX {AGIX_REQUIRED_VERSION} es necesario para crear Planner sin un orquestador "
+            f"explícito. Instala 'agix=={AGIX_REQUIRED_VERSION}' o proporciona un objeto con "
             "'broadcast_state'."
         ) from exc
     virtual_qualia = getattr(orchestrator, "VirtualQualia", None)
     if virtual_qualia is None:
         raise RuntimeError(
             "No se encontró 'agix.orchestrator.VirtualQualia'. Verifica que "
-            "la instalación de AGIX sea compatible con la versión 1.9.0."
+            f"la instalación de AGIX sea compatible con la versión {AGIX_REQUIRED_VERSION}."
         )
     return virtual_qualia
 
@@ -82,8 +83,8 @@ class Planner:
             orquestador.
         """
         planning_state = dict(state)
-        should_govern = "task" in planning_state or "prompt" in planning_state or "instruction" in planning_state
-        if should_govern and "qualia" not in planning_state:
+        should_govern = "qualia" not in planning_state
+        if should_govern:
             planning_state, blocked = self.qualia_engine.govern_decision(
                 planning_state, phase="planning"
             )
@@ -95,8 +96,7 @@ class Planner:
                 return blocked_plan
         try:
             plan = self.orchestrator.broadcast_state(planning_state)
-            if should_govern or "qualia" in planning_state:
-                self.qualia_engine.after_decision(plan, planning_state, phase="planning")
+            self.qualia_engine.after_decision(plan, planning_state, phase="planning")
             return plan
         except Exception:  # pragma: no cover - logging side effect
             logger.exception("Error al difundir el estado")
