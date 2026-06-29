@@ -5,7 +5,7 @@ Este proyecto fija la integración con `agix==1.9.0` y expone extras opcionales 
 ## Flujo central
 
 1. **Entrada**: scripts, planificadores, routers o ciclos de tokens construyen una petición con `task`, `context`, `goals`, `prompt` o `token`.
-2. **CoreQualiaEngine.before_decision**: delega en `QualiaNode.enrich_request` para adjuntar políticas, patrones cognitivos, restricciones morales, estado fenomenológico, compatibilidad AGIX y señales evolutivas.
+2. **CoreQualiaEngine.govern_decision**: delega en `QualiaNode.enrich_request` para adjuntar políticas, patrones cognitivos, restricciones morales, estado fenomenológico, compatibilidad AGIX y señales evolutivas; además centraliza si la decisión debe bloquearse antes de tocar el GPT.
 3. **Decisión moral/ética**: `QualiaNode` clasifica el riesgo, evalúa restricciones legales y construye una auditoría de decisión.
 4. **Ejecución GPT**: si no hay bloqueo, la petición enriquecida llega al `MetaRouter`, `ReasoningKernel`, chat o generador.
 5. **CoreQualiaEngine.after_decision**: integra feedback, recompensa evolutiva, trazas y señales neuromórficas en el estado.
@@ -56,4 +56,21 @@ señales genéticas y las señales neuromórficas.
 | Algoritmos genéticos | `AgixEvolutionAdapters` consulta agentes genéticos de AGIX cuando están disponibles y habilitados. |
 | Patrones neuromórficos | El agente neuromórfico puede aportar activación antes del enrutado y feedback después de la respuesta. |
 | Memoria fenomenológica | Si `GestorDeMemoria` existe, se registran experiencias de petición y respuesta. |
-| Router directo | `MetaRouter(qualia_node=...)` enriquece la petición e integra feedback posterior. |
+| Router directo | `MetaRouter(qualia_node=...)` enriquece la petición, devuelve resultados bloqueados auditables sin llamar al experto e integra feedback posterior. |
+| Planificador AGIX | `agicore_core.Planner` crea `CoreQualiaEngine` por defecto y bloquea planes ilegales antes de `VirtualQualia.broadcast_state`. |
+| Generación CLI | `QualiaControlledTokenGenerator` consulta Qualia antes de pedir el siguiente token y después de validar el token decodificado. |
+
+### Dimensión neuromórfica
+
+El perfil `qualia_profile.json` configura `neuromorphic_agent.input_size` en
+`4`, alineado con el vector que el Core calcula para AGIX:
+
+1. longitud normalizada del texto;
+2. número normalizado de metas;
+3. número normalizado de restricciones violadas;
+4. puntuación ética.
+
+Si un despliegue AGIX usa otra dimensión, `AgixEvolutionAdapters` ajusta el
+vector al `input_size` configurado mediante truncado explícito o relleno con
+ceros, y expone `neuromorphic_input_size` y `neuromorphic_input_vector` en las
+señales auditables.

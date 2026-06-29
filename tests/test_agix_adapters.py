@@ -92,5 +92,38 @@ def test_neuromorphic_agent_contributes_activation_signal(monkeypatch):
     assert created["shape"] == (4, 2)
     assert len(created["vector"]) == 4
     assert signals["neuromorphic_agent_active"] is True
+    assert signals["neuromorphic_input_size"] == 4
+    assert len(signals["neuromorphic_input_vector"]) == 4
     assert signals["neuromorphic_activation"] == 0.75
     assert signals["selected_expert"] == "safe"
+
+
+def test_neuromorphic_input_matches_configured_size(monkeypatch):
+    created = {}
+    agix = types.ModuleType("agix")
+    agents = types.ModuleType("agix.agents")
+    neuro = types.ModuleType("agix.agents.neuromorphic")
+
+    class NeuromorphicAgent:
+        def __init__(self, input_size, output_size):
+            created["shape"] = (input_size, output_size)
+
+        def activate(self, vector):
+            created["vector"] = vector
+            return {"activation": 0.25}
+
+    neuro.NeuromorphicAgent = NeuromorphicAgent
+    monkeypatch.setitem(sys.modules, "agix", agix)
+    monkeypatch.setitem(sys.modules, "agix.agents", agents)
+    monkeypatch.setitem(sys.modules, "agix.agents.neuromorphic", neuro)
+
+    adapters = AgixEvolutionAdapters(
+        enable_genetic_algorithms=False,
+        enable_neuromorphic_patterns=True,
+        neuromorphic_config={"input_size": 2, "output_size": 1},
+    )
+    signals = adapters.enrich({"task": "analizar", "goals": ["ok"]})
+
+    assert created["shape"] == (2, 1)
+    assert len(created["vector"]) == 2
+    assert signals["neuromorphic_input_size"] == 2

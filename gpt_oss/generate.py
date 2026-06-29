@@ -13,6 +13,72 @@ from gpt_oss.tokenizer import get_tokenizer
 from agicore_core.qualia_engine import CoreQualiaEngine
 
 
+class QualiaControlledTokenGenerator:
+    """Envuelve un generador para que Qualia gobierne cada paso de token."""
+
+    def __init__(self, generator, tokenizer, qualia_engine):
+        self.generator = generator
+        self.tokenizer = tokenizer
+        self.qualia_engine = qualia_engine
+
+    def generate(self, tokens, *, prompt_state, temperature, limit):
+        decoded_text = prompt_state.get("prompt", "")
+        stream = self.generator.generate(
+            tokens,
+            stop_tokens=[self.tokenizer.eot_token],
+            temperature=temperature,
+            max_tokens=limit,
+            return_logprobs=True,
+        )
+        stream = iter(stream)
+        while True:
+            pre_state, blocked = self.qualia_engine.govern_decision(
+                {
+                    **prompt_state,
+                    "task": "token_generation",
+                    "decoded_text": decoded_text,
+                    "last_token": tokens[-1] if tokens else None,
+                },
+                phase="token_generation:pre",
+            )
+            if blocked is not None:
+                self.qualia_engine.after_decision(
+                    blocked, pre_state, phase="token_generation:pre"
+                )
+                yield None, None, blocked
+                return
+
+            try:
+                token, logprob = next(stream)
+            except StopIteration:
+                return
+
+            decoded_token = self.tokenizer.decode([token])
+            token_state, blocked = self.qualia_engine.govern_decision(
+                {
+                    **pre_state,
+                    "token": decoded_token,
+                    "last_token": decoded_token,
+                    "decoded_text": decoded_text + decoded_token,
+                },
+                phase="token_generation:post",
+            )
+            if blocked is not None:
+                self.qualia_engine.after_decision(
+                    blocked, token_state, phase="token_generation:post"
+                )
+                yield None, None, blocked
+                return
+
+            decoded_text += decoded_token
+            self.qualia_engine.after_decision(
+                {"token": decoded_token, "logprob": logprob},
+                token_state,
+                phase="token_generation",
+            )
+            yield token, logprob, None
+
+
 def main(args):
     planner = Planner()  # Punto de integración para metas y modo
     qualia_engine = CoreQualiaEngine()
@@ -40,9 +106,8 @@ def main(args):
         "goals": ["safe_generation"],
         "prompt": args.prompt,
     }
-    prompt_state = qualia_engine.before_decision(prompt_state, phase="generate_prompt")
-    if qualia_engine.is_blocked(prompt_state):
-        blocked = qualia_engine.blocked_result(prompt_state)
+    prompt_state, blocked = qualia_engine.govern_decision(prompt_state, phase="generate_prompt")
+    if blocked is not None:
         qualia_engine.after_decision(blocked, prompt_state, phase="generate_prompt")
         print(f"Generación bloqueada por Qualia: {blocked}")
         return
@@ -50,25 +115,19 @@ def main(args):
     tokenizer = get_tokenizer()
     tokens = tokenizer.encode(args.prompt)
     decoded_text = args.prompt
-    for token, logprob in generator.generate(tokens, stop_tokens=[tokenizer.eot_token], temperature=args.temperature, max_tokens=args.limit, return_logprobs=True):
+    controlled_generator = QualiaControlledTokenGenerator(generator, tokenizer, qualia_engine)
+    for token, logprob, blocked in controlled_generator.generate(
+        tokens,
+        prompt_state=prompt_state,
+        temperature=args.temperature,
+        limit=args.limit,
+    ):
+        if blocked is not None:
+            print(f"Token bloqueado por Qualia: {blocked}")
+            break
         tokens.append(token)
         decoded_token = tokenizer.decode([token])
         decoded_text += decoded_token
-        token_state = qualia_engine.before_decision(
-            {
-                **prompt_state,
-                "task": "token_generation",
-                "token": decoded_token,
-                "last_token": decoded_token,
-                "decoded_text": decoded_text,
-            },
-            phase="token_generation",
-        )
-        if qualia_engine.is_blocked(token_state):
-            blocked = qualia_engine.blocked_result(token_state)
-            qualia_engine.after_decision(blocked, token_state, phase="token_generation")
-            print(f"Token bloqueado por Qualia: {blocked}")
-            break
         print(
             f"Generated token: {repr(decoded_token)}, logprob: {logprob}"
         )

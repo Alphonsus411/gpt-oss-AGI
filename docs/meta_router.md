@@ -147,7 +147,9 @@ petición queda enriquecida con:
   `NeuromorphicAgent`.
 
 Si una solicitud activa una restricción de severidad `block`, el kernel no llama
-al planner ni al router. En su lugar devuelve un resultado bloqueado con
+al planner ni al router. Las rutas directas del `MetaRouter` tampoco ejecutan
+expertos cuando reciben un payload Qualia bloqueado: devuelven un resultado
+bloqueado uniforme con
 `violated_constraints`, `legal_policy_action`, `qualia_policies` y
 `cognitive_patterns`, de modo que la memoria y las trazas puedan auditar por qué
 el GPT no ejecutó la decisión.
