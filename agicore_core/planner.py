@@ -15,6 +15,8 @@ import json
 import logging
 from pathlib import Path
 
+from .qualia_engine import CoreQualiaEngine
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +53,8 @@ class Planner:
 
     def __init__(self, orchestrator: Optional[Any] = None, qualia_node: Optional[Any] = None) -> None:
         self.orchestrator = orchestrator or _load_virtual_qualia()()
-        self.qualia_node = qualia_node
+        self.qualia_engine = CoreQualiaEngine(qualia_node) if qualia_node is not None else None
+        self.qualia_node = self.qualia_engine.qualia_node if self.qualia_engine else None
 
         config_path = Path(__file__).resolve().parent / "config" / "agent_profile.json"
         try:
@@ -79,25 +82,20 @@ class Planner:
             orquestador.
         """
         planning_state = dict(state)
-        if self.qualia_node is not None and "qualia" not in planning_state:
-            planning_state = self.qualia_node.enrich_request(
+        if self.qualia_engine is not None and "qualia" not in planning_state:
+            planning_state = self.qualia_engine.before_decision(
                 planning_state, phase="planning"
             )
-            if planning_state.get("qualia", {}).get("blocked"):
-                blocked_plan = [{
-                    "blocked": True,
-                    "reason": planning_state["qualia"]["policy_action"],
-                    "ethical_classification": planning_state["qualia"]["ethical_classification"],
-                    "violated_constraints": planning_state["qualia"].get("violated_constraints", []),
-                }]
-                self.qualia_node.integrate_response(
+            if self.qualia_engine.is_blocked(planning_state):
+                blocked_plan = [self.qualia_engine.blocked_result(planning_state)]
+                self.qualia_engine.after_decision(
                     blocked_plan, planning_state, phase="planning"
                 )
                 return blocked_plan
         try:
             plan = self.orchestrator.broadcast_state(planning_state)
-            if self.qualia_node is not None and "qualia" not in planning_state:
-                self.qualia_node.integrate_response(plan, planning_state, phase="planning")
+            if self.qualia_engine is not None:
+                self.qualia_engine.after_decision(plan, planning_state, phase="planning")
             return plan
         except Exception:  # pragma: no cover - logging side effect
             logger.exception("Error al difundir el estado")

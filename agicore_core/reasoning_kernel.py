@@ -15,6 +15,7 @@ from gpt_oss.strategic_memory import Episode, StrategicMemory
 from .planner import Planner
 from .meta_evaluator import MetaEvaluator
 from .qualia_node import QualiaNode
+from .qualia_engine import CoreQualiaEngine
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,8 @@ class ReasoningKernel:
         self.router = router
         self.evaluator = evaluator
         self.memory = memory
-        self.qualia_node = qualia_node or QualiaNode()
+        self.qualia_engine = CoreQualiaEngine(qualia_node)
+        self.qualia_node = self.qualia_engine.qualia_node
         if hasattr(self.router, "_qualia_node") and getattr(self.router, "_qualia_node") is None:
             self.router._qualia_node = self.qualia_node
         self._state: Dict[str, Any] = {}
@@ -158,19 +160,7 @@ class ReasoningKernel:
         return self._state
 
     def _blocked_result_from_qualia(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        qualia = request["qualia"]
-        return {
-            "blocked": True,
-            "reason": qualia["policy_action"],
-            "ethical_classification": qualia["ethical_classification"],
-            "violated_constraints": [
-                item["name"] for item in qualia.get("violated_constraints", [])
-            ],
-            "violated_constraint_details": qualia.get("violated_constraints", []),
-            "legal_policy_action": qualia.get("legal_policy_action"),
-            "qualia_policies": request.get("qualia_policies", []),
-            "cognitive_patterns": request.get("cognitive_patterns", []),
-        }
+        return self.qualia_engine.blocked_result(request)
 
     def evaluate_step(self, step: Dict[str, Any]) -> Any:
         """Evalúa un ``step`` con ramificación condicional.
@@ -208,11 +198,11 @@ class ReasoningKernel:
             step.update(branch)
 
         request: Dict[str, Any] = {**self._state, **step}
-        request = self.qualia_node.enrich_request(request, phase="step")
-        if request.get("qualia", {}).get("blocked"):
+        request = self.qualia_engine.before_decision(request, phase="step")
+        if self.qualia_engine.is_blocked(request):
             result = self._blocked_result_from_qualia(request)
             self._state.update(result)
-            self.qualia_node.integrate_response(result, self._state, phase="step")
+            self.qualia_engine.after_decision(result, self._state, phase="step")
             self.history.append(
                 {
                     "step": step,
@@ -227,7 +217,7 @@ class ReasoningKernel:
             self._state.update(result)
         else:
             self._state["result"] = result
-        self.qualia_node.integrate_response(result, self._state, phase="step")
+        self.qualia_engine.after_decision(result, self._state, phase="step")
 
         introspeccion = None
         if self.evaluator is not None:
@@ -260,6 +250,8 @@ class ReasoningKernel:
                     "qualia_legal_policy_action": request.get("qualia", {}).get("legal_policy_action"),
                     "qualia_ethical_evidence": request.get("qualia", {}).get("ethical_evidence", {}),
                     "qualia_evolutionary_signals": request.get("qualia", {}).get("evolutionary_signals", {}),
+                    "qualia_decision_audit": request.get("qualia", {}).get("decision_audit", {}),
+                    "qualia_neuromorphic_feedback": self._state.get("qualia_neuromorphic_feedback", {}),
                     "qualia_engine_active": request.get("qualia", {}).get("phenomenological_state", {}).get("qualia_engine_active"),
                 },
             )
@@ -302,11 +294,11 @@ class ReasoningKernel:
                     }
                     self._state.update(metadata_filtrada)
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
-            request = self.qualia_node.enrich_request(request, phase="token")
-            if request.get("qualia", {}).get("blocked"):
+            request = self.qualia_engine.before_decision(request, phase="token")
+            if self.qualia_engine.is_blocked(request):
                 blocked = self._blocked_result_from_qualia(request)
                 self._state.update(blocked)
-                self.qualia_node.integrate_response(blocked, self._state, phase="token")
+                self.qualia_engine.after_decision(blocked, self._state, phase="token")
                 break
             siguiente = self.router.route(request)
             if siguiente is None:
@@ -328,12 +320,14 @@ class ReasoningKernel:
                         "qualia_legal_policy_action": request.get("qualia", {}).get("legal_policy_action"),
                         "qualia_ethical_evidence": request.get("qualia", {}).get("ethical_evidence", {}),
                         "qualia_evolutionary_signals": request.get("qualia", {}).get("evolutionary_signals", {}),
+                        "qualia_decision_audit": request.get("qualia", {}).get("decision_audit", {}),
+                        "qualia_neuromorphic_feedback": self._state.get("qualia_neuromorphic_feedback", {}),
                         "qualia_engine_active": request.get("qualia", {}).get("phenomenological_state", {}).get("qualia_engine_active"),
                     },
                 )
                 self.memory.add_episode(episodio)
             self._state["last_token"] = siguiente
-            self.qualia_node.integrate_response(siguiente, self._state, phase="token")
+            self.qualia_engine.after_decision(siguiente, self._state, phase="token")
             yield siguiente
             count += 1
             token = siguiente
@@ -393,7 +387,7 @@ class ReasoningKernel:
             raise ValueError("Se requiere un Planner para ejecutar 'run'")
 
         for _ in range(max_iterations):
-            planning_request = self.qualia_node.enrich_request(
+            planning_request = self.qualia_engine.before_decision(
                 {
                     **self._state,
                     "task": "planning",
@@ -402,10 +396,10 @@ class ReasoningKernel:
                 },
                 phase="planning",
             )
-            if planning_request.get("qualia", {}).get("blocked"):
+            if self.qualia_engine.is_blocked(planning_request):
                 result = self._blocked_result_from_qualia(planning_request)
                 self._state.update(result)
-                self.qualia_node.integrate_response(
+                self.qualia_engine.after_decision(
                     result, self._state, phase="planning"
                 )
                 self.history.append({"planning": "blocked", "result": result})
@@ -415,7 +409,7 @@ class ReasoningKernel:
             except Exception as exc:  # pragma: no cover - planificación fallida
                 self.history.append({"error": str(exc)})
                 return self._state
-            self.qualia_node.integrate_response(plan, self._state, phase="planning")
+            self.qualia_engine.after_decision(plan, self._state, phase="planning")
 
             if isinstance(plan, dict):
                 if "token" in plan:

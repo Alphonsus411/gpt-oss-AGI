@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 from meta_router import MetaRouter
 
 from .qualia_node import QualiaNode
+from .qualia_engine import CoreQualiaEngine
 
 
 class ReasoningKernel:
@@ -18,7 +19,8 @@ class ReasoningKernel:
 
     def __init__(self, router: MetaRouter, qualia_node: QualiaNode | None = None) -> None:
         self.router = router
-        self.qualia_node = qualia_node or QualiaNode()
+        self.qualia_engine = CoreQualiaEngine(qualia_node)
+        self.qualia_node = self.qualia_engine.qualia_node
 
     def execute_step(
         self,
@@ -49,15 +51,11 @@ class ReasoningKernel:
 
         request = {"task": task, "context": context, "goals": goals}
         request.update(step)
-        request = self.qualia_node.enrich_request(request, phase="kernel_step")
-        if request.get("qualia", {}).get("blocked"):
-            result = {
-                "blocked": True,
-                "reason": request["qualia"]["policy_action"],
-                "ethical_classification": request["qualia"]["ethical_classification"],
-            }
+        request = self.qualia_engine.before_decision(request, phase="kernel_step")
+        if self.qualia_engine.is_blocked(request):
+            result = self.qualia_engine.blocked_result(request)
             state: Dict[str, Any] = {}
-            self.qualia_node.integrate_response(result, state, phase="kernel_step")
+            self.qualia_engine.after_decision(result, state, phase="kernel_step")
             return result
         try:
             result = self.router.route(
@@ -70,7 +68,7 @@ class ReasoningKernel:
             # Algunos ``MetaRouter`` de pruebas no aceptan pesos heurísticos
             result = self.router.route(request)
         state: Dict[str, Any] = {}
-        self.qualia_node.integrate_response(result, state, phase="kernel_step")
+        self.qualia_engine.after_decision(result, state, phase="kernel_step")
         return result
 
     def execute_plan(

@@ -157,10 +157,10 @@ class MetaRouter:
                     score -= 100
                 evolutionary = qualia.get("evolutionary_signals", {})
                 if isinstance(evolutionary, dict):
-                    recommended = evolutionary.get("recommended_action")
+                    recommended = evolutionary.get("selected_expert") or evolutionary.get("recommended_action")
                     confidence = float(evolutionary.get("confidence", 0.0) or 0.0)
                     if recommended and str(recommended) in {name, *expert.tasks, *expert.goals}:
-                        score += int(round(min(confidence, 1.0) * 3))
+                        score += int(round(min(confidence, 1.0) * 6))
                     score += int(round(float(evolutionary.get("neuromorphic_activation", 0.0) or 0.0)))
 
             if episodes:
@@ -220,6 +220,8 @@ class MetaRouter:
         qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else None
         if qualia and qualia.get("blocked"):
             raise ValueError("Solicitud bloqueada por políticas Qualia")
+        if qualia and qualia.get("moral_decision", {}).get("allowed") is False:
+            raise ValueError("Solicitud bloqueada por decisión moral Qualia")
 
         scores = self.select_expert(
             task,
@@ -267,6 +269,8 @@ class MetaRouter:
                         "qualia_legal_policy_action": (qualia or {}).get("legal_policy_action"),
                         "qualia_ethical_evidence": (qualia or {}).get("ethical_evidence", {}),
                         "qualia_evolutionary_signals": (qualia or {}).get("evolutionary_signals", {}),
+                        "qualia_decision_audit": (qualia or {}).get("decision_audit", {}),
+                        "qualia_neuromorphic_feedback": request.get("qualia_neuromorphic_feedback", {}),
                     },
                 )
                 self._memory.add_episode(episode)
@@ -291,6 +295,8 @@ class MetaRouter:
                     "qualia_legal_policy_action": (qualia or {}).get("legal_policy_action"),
                     "qualia_ethical_evidence": (qualia or {}).get("ethical_evidence", {}),
                     "qualia_evolutionary_signals": (qualia or {}).get("evolutionary_signals", {}),
+                    "qualia_decision_audit": (qualia or {}).get("decision_audit", {}),
+                    "qualia_neuromorphic_feedback": request.get("qualia_neuromorphic_feedback", {}),
                 },
             )
             self._memory.add_episode(episode)

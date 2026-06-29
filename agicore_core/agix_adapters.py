@@ -115,11 +115,13 @@ class AgixEvolutionAdapters:
                 method = getattr(self.neuromorphic_agent, method_name, None)
                 if callable(method):
                     try:
-                        method(dict(state), reward)
+                        update_result = method(dict(state), reward)
                         feedback["evolution_feedback_applied"] = True
+                        self._merge_neuromorphic_feedback(feedback, update_result)
                     except TypeError:
-                        method(reward)
+                        update_result = method(reward)
                         feedback["evolution_feedback_applied"] = True
+                        self._merge_neuromorphic_feedback(feedback, update_result)
                     except Exception as exc:
                         feedback["neuromorphic_error"] = str(exc)
                     break
@@ -132,9 +134,30 @@ class AgixEvolutionAdapters:
         signals["recommended_action"] = signal.get(
             "recommended_action", signal.get("selected", signals["recommended_action"])
         )
+        signals["selected_expert"] = signal.get(
+            "selected_expert", signal.get("expert", signals.get("selected_expert"))
+        )
+        signals["reasoning_mode"] = signal.get(
+            "reasoning_mode", signal.get("mode", signals.get("reasoning_mode"))
+        )
         for key in ("confidence", "mutation_rate", "exploration_bias", "neuromorphic_activation"):
             if key in signal:
                 signals[key] = float(signal[key])
+
+    @staticmethod
+    def _merge_neuromorphic_feedback(feedback: Dict[str, Any], result: Any) -> None:
+        if not isinstance(result, dict):
+            if result is not None:
+                feedback["neuromorphic_state"] = result
+            return
+        for key in (
+            "neuromorphic_state",
+            "plasticity_delta",
+            "activation_summary",
+            "reward",
+        ):
+            if key in result:
+                feedback[key] = result[key]
 
     @staticmethod
     def _calculate_reward(result: Any, state: Mapping[str, Any]) -> float:

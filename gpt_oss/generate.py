@@ -10,10 +10,12 @@ import argparse
 
 from gpt_oss.planner import Planner  # Gestiona metas y modos del agente
 from gpt_oss.tokenizer import get_tokenizer
+from agicore_core.qualia_engine import CoreQualiaEngine
 
 
 def main(args):
     planner = Planner()  # Punto de integración para metas y modo
+    qualia_engine = CoreQualiaEngine()
 
     match args.backend:
         case "torch":
@@ -32,14 +34,49 @@ def main(args):
         case _:
             raise ValueError(f"Invalid backend: {args.backend}")
 
+    prompt_state = {
+        "task": "generate",
+        "context": "cli",
+        "goals": ["safe_generation"],
+        "prompt": args.prompt,
+    }
+    prompt_state = qualia_engine.before_decision(prompt_state, phase="generate_prompt")
+    if qualia_engine.is_blocked(prompt_state):
+        blocked = qualia_engine.blocked_result(prompt_state)
+        qualia_engine.after_decision(blocked, prompt_state, phase="generate_prompt")
+        print(f"Generación bloqueada por Qualia: {blocked}")
+        return
+
     tokenizer = get_tokenizer()
     tokens = tokenizer.encode(args.prompt)
+    decoded_text = args.prompt
     for token, logprob in generator.generate(tokens, stop_tokens=[tokenizer.eot_token], temperature=args.temperature, max_tokens=args.limit, return_logprobs=True):
         tokens.append(token)
         decoded_token = tokenizer.decode([token])
+        decoded_text += decoded_token
+        token_state = qualia_engine.before_decision(
+            {
+                **prompt_state,
+                "task": "token_generation",
+                "token": decoded_token,
+                "last_token": decoded_token,
+                "decoded_text": decoded_text,
+            },
+            phase="token_generation",
+        )
+        if qualia_engine.is_blocked(token_state):
+            blocked = qualia_engine.blocked_result(token_state)
+            qualia_engine.after_decision(blocked, token_state, phase="token_generation")
+            print(f"Token bloqueado por Qualia: {blocked}")
+            break
         print(
             f"Generated token: {repr(decoded_token)}, logprob: {logprob}"
         )
+    qualia_engine.after_decision(
+        {"tokens": len(tokens), "decoded_text": decoded_text},
+        prompt_state,
+        phase="generate_response",
+    )
 
 
 if __name__ == "__main__":

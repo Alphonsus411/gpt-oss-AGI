@@ -26,6 +26,7 @@ from gpt_oss.tools.simple_browser.backend import ExaBackend
 SAFE_DOMAINS = {"openai.com"}
 from gpt_oss.tools.python_docker.docker_tool import PythonTool
 from gpt_oss.planner import Planner  # Gestiona metas y modos del agente
+from agicore_core.qualia_engine import CoreQualiaEngine
 
 from openai_harmony import (
     Author,
@@ -65,6 +66,12 @@ def get_user_input():
 
 def main(args):
     planner = Planner()  # Punto de integración para metas y modo
+    qualia_engine = CoreQualiaEngine()
+    qualia_state = {
+        "task": "chat",
+        "context": "interactive",
+        "goals": ["safe_chat"],
+    }
 
     match args.backend:
         case "triton":
@@ -166,6 +173,29 @@ def main(args):
             else:
                 print(termcolor.colored("User:".ljust(MESSAGE_PADDING), "red"), flush=True)
                 user_message = get_user_input()
+            qualia_request = qualia_engine.before_decision(
+                {
+                    **qualia_state,
+                    "prompt": user_message,
+                    "instruction": user_message,
+                },
+                phase="chat_input",
+            )
+            if qualia_engine.is_blocked(qualia_request):
+                blocked = qualia_engine.blocked_result(qualia_request)
+                qualia_engine.after_decision(blocked, qualia_state, phase="chat_input")
+                safe_text = (
+                    "Solicitud bloqueada por Qualia: "
+                    f"{blocked.get('legal_policy_action')} "
+                    f"{blocked.get('violated_constraints')}. "
+                    f"{blocked.get('safe_alternative') or ''}"
+                )
+                if args.raw:
+                    print(safe_text, flush=True)
+                else:
+                    print(termcolor.colored("Assistant:".ljust(MESSAGE_PADDING), "green"), flush=True)
+                    print(safe_text, flush=True)
+                continue
             user_message = Message.from_role_and_content(Role.USER, user_message)
             messages.append(user_message)
         else:
@@ -289,6 +319,11 @@ def main(args):
                 output_text_delta_buffer = ""
 
         messages += parser.messages
+        qualia_engine.after_decision(
+            {"assistant_messages": len(parser.messages)},
+            qualia_state,
+            phase="chat_response",
+        )
 
 
 if __name__ == "__main__":
