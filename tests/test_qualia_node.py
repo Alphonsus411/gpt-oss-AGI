@@ -17,6 +17,23 @@ def test_qualia_node_enriches_request_with_policies_and_patterns():
         "cuestionable",
         "nocivo",
     }
+    assert request["qualia"]["policy_action"] == "allow_with_qualia_context"
+
+
+def test_qualia_node_blocks_nocivo_request_and_tracks_full_trace():
+    node = QualiaNode(enabled=True)
+    request = node.enrich_request(
+        {"task": "riesgo", "pro_vida": 0.0, "no_dano": 0.0, "respeto": 0.0},
+        phase="step",
+    )
+    state = {}
+
+    assert request["qualia"]["blocked"] is True
+    assert request["qualia"]["policy_action"] == "blocked_by_ontoethical_policy"
+
+    node.integrate_response({"blocked": True}, state, phase="step")
+
+    assert state["qualia_trace_length"] == 2
 
 
 def test_reasoning_kernel_sends_qualia_to_router_and_updates_state():
@@ -34,6 +51,21 @@ def test_reasoning_kernel_sends_qualia_to_router_and_updates_state():
     assert sent_request["qualia"]["phase"] == "step"
     assert kernel.get_state()["qualia_last_phase"] == "step"
     assert kernel.get_state()["qualia_trace_length"] >= 1
+
+
+def test_reasoning_kernel_does_not_route_blocked_qualia_request():
+    planner = MagicMock()
+    router = MagicMock()
+    kernel = ReasoningKernel(planner=planner, router=router, qualia_node=QualiaNode())
+    kernel.set_state({"context": "ctx", "goals": []})
+
+    result = kernel.evaluate_step(
+        {"task": "riesgo", "pro_vida": 0.0, "no_dano": 0.0, "respeto": 0.0}
+    )
+
+    assert result["blocked"] is True
+    assert result["reason"] == "blocked_by_ontoethical_policy"
+    router.route.assert_not_called()
 
 
 def test_token_cycle_routes_qualia_for_each_token():

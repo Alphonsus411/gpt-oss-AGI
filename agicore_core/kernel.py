@@ -50,6 +50,15 @@ class ReasoningKernel:
         request = {"task": task, "context": context, "goals": goals}
         request.update(step)
         request = self.qualia_node.enrich_request(request, phase="kernel_step")
+        if request.get("qualia", {}).get("blocked"):
+            result = {
+                "blocked": True,
+                "reason": request["qualia"]["policy_action"],
+                "ethical_classification": request["qualia"]["ethical_classification"],
+            }
+            state: Dict[str, Any] = {}
+            self.qualia_node.integrate_response(result, state, phase="kernel_step")
+            return result
         try:
             result = self.router.route(
                 request,

@@ -8,15 +8,34 @@ de planificación.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any, Dict, List, Optional
 
 import json
 import logging
 from pathlib import Path
 
-from agix.orchestrator import VirtualQualia
-
 logger = logging.getLogger(__name__)
+
+
+def _load_virtual_qualia() -> type[Any]:
+    """Carga ``VirtualQualia`` de AGIX solo cuando el planificador lo necesita."""
+
+    try:
+        orchestrator = importlib.import_module("agix.orchestrator")
+    except ImportError as exc:
+        raise RuntimeError(
+            "AGIX 1.9.0 es necesario para crear Planner sin un orquestador "
+            "explícito. Instala 'agix==1.9.0' o proporciona un objeto con "
+            "'broadcast_state'."
+        ) from exc
+    virtual_qualia = getattr(orchestrator, "VirtualQualia", None)
+    if virtual_qualia is None:
+        raise RuntimeError(
+            "No se encontró 'agix.orchestrator.VirtualQualia'. Verifica que "
+            "la instalación de AGIX sea compatible con la versión 1.9.0."
+        )
+    return virtual_qualia
 
 
 class Planner:
@@ -25,13 +44,13 @@ class Planner:
     Parameters
     ----------
     orchestrator:
-        Instancia de :class:`agix.orchestrator.VirtualQualia` utilizada para
-        coordinar la difusión de estados. Si no se proporciona, se crea una
-        instancia sin clientes registrados.
+        Instancia compatible con :class:`agix.orchestrator.VirtualQualia`
+        utilizada para coordinar la difusión de estados. Si no se proporciona,
+        se crea una instancia sin clientes registrados.
     """
 
-    def __init__(self, orchestrator: Optional[VirtualQualia] = None) -> None:
-        self.orchestrator = orchestrator or VirtualQualia()
+    def __init__(self, orchestrator: Optional[Any] = None) -> None:
+        self.orchestrator = orchestrator or _load_virtual_qualia()()
 
         config_path = Path(__file__).resolve().parent / "config" / "agent_profile.json"
         try:

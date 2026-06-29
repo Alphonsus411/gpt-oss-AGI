@@ -131,6 +131,7 @@ class QualiaNode:
             return enriched
 
         score = self._ethical_score(enriched)
+        classification = self._classify(score)
         qualia_payload = {
             "agix_version": self._agix_version,
             "required_agix_version": AGIX_REQUIRED_VERSION,
@@ -138,7 +139,13 @@ class QualiaNode:
             "policies": [policy.__dict__ for policy in self.policies],
             "cognitive_patterns": [pattern.__dict__ for pattern in self.patterns],
             "ethical_score": score,
-            "ethical_classification": self._classify(score),
+            "ethical_classification": classification,
+            "blocked": classification == "nocivo",
+            "policy_action": (
+                "blocked_by_ontoethical_policy"
+                if classification == "nocivo"
+                else "allow_with_qualia_context"
+            ),
         }
         enriched["qualia"] = qualia_payload
         enriched["qualia_policies"] = [policy.name for policy in self.policies]
@@ -160,10 +167,10 @@ class QualiaNode:
         event = f"{phase}:{type(result).__name__}"
         if self._spirit is not None:
             self._spirit.experimentar(event, 0.2, "reflexion")
+        self.trace.append({"phase": f"{phase}:response", "result": result})
         state["qualia_last_phase"] = phase
         state["qualia_trace_length"] = len(self.trace)
         state["qualia_policies"] = [policy.name for policy in self.policies]
-        self.trace.append({"phase": f"{phase}:response", "result": result})
         return state
 
     def _ethical_score(self, request: Mapping[str, Any]) -> float:
