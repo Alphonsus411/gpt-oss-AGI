@@ -16,6 +16,7 @@ from .planner import Planner
 from .meta_evaluator import MetaEvaluator
 from .qualia_node import QualiaNode
 from .qualia_engine import CoreQualiaEngine
+from .training_bridge import QualiaTrainingBridge, TrainingSignal
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,9 @@ _ALLOWED_METADATA_KEYS = {
     "qualia_legal_policy_action",
     "qualia_ethical_evidence",
     "qualia_engine_active",
+    "qualia_cognitive_signals",
+    "qualia_cognitive_feedback",
+    "inferred_memory",
 }
 
 
@@ -154,6 +158,7 @@ class ReasoningKernel:
         self.memory = memory
         self.qualia_engine = CoreQualiaEngine(qualia_node)
         self.qualia_node = self.qualia_engine.qualia_node
+        self.training_bridge = QualiaTrainingBridge(self.qualia_engine)
         if hasattr(self.router, "_qualia_node") and getattr(self.router, "_qualia_node") is None:
             self.router._qualia_node = self.qualia_node
         self._state: Dict[str, Any] = {}
@@ -185,8 +190,30 @@ class ReasoningKernel:
                 "cognitive_patterns": request.get("cognitive_patterns", []),
                 "qualia_decision_audit": qualia.get("decision_audit", {}),
                 "qualia_evolutionary_signals": qualia.get("evolutionary_signals", {}),
+                "qualia_cognitive_signals": qualia.get("cognitive_signals", {}),
             }
         )
+
+    def _record_memory_episode(self, episode: Episode, *, blocked: bool = False) -> None:
+        if self.memory is None:
+            return
+        if blocked:
+            self.memory.add_rejected_learning(episode, reason="blocked_by_qualia")
+            return
+        self.memory.add_episode(episode)
+        result = self.memory.consolidate_from_episodes()
+        if result.hypotheses_created or result.hypotheses_updated:
+            self._state["inferred_memory"] = [
+                {"pattern": hypothesis.pattern, "confidence": hypothesis.confidence}
+                for hypothesis in self.memory.infer_patterns()
+            ]
+
+    def record_training_signal(self, signal: TrainingSignal) -> Any:
+        feedback = self.training_bridge.record_training_signal(signal, self._state)
+        episode = self.training_bridge.to_memory_episode(feedback)
+        self._record_memory_episode(episode, blocked=bool(feedback.rejected_signals))
+        self._state["training_feedback"] = feedback
+        return feedback
 
     def evaluate_step(self, step: Dict[str, Any]) -> Any:
         """Evalúa un ``step`` con ramificación condicional.
@@ -237,6 +264,16 @@ class ReasoningKernel:
                     "introspeccion": None,
                 }
             )
+            self._record_memory_episode(
+                Episode(
+                    timestamp=datetime.utcnow(),
+                    input=step,
+                    action="blocked_by_qualia",
+                    outcome=result,
+                    metadata={**dict(self._state), "status": "blocked_by_qualia"},
+                ),
+                blocked=True,
+            )
             return result
         result = self.router.route(request)
 
@@ -282,7 +319,7 @@ class ReasoningKernel:
                     "qualia_engine_active": request.get("qualia", {}).get("phenomenological_state", {}).get("qualia_engine_active"),
                 },
             )
-            self.memory.add_episode(episodio)
+            self._record_memory_episode(episodio)
 
         return result
 
@@ -313,6 +350,13 @@ class ReasoningKernel:
         count = 0
         while max_tokens is None or count < max_tokens:
             if self.memory is not None:
+                self.memory.consolidate_from_episodes()
+                inferred = [
+                    {"pattern": hypothesis.pattern, "confidence": hypothesis.confidence}
+                    for hypothesis in self.memory.infer_patterns()
+                ]
+                if inferred:
+                    self._state["inferred_memory"] = inferred
                 for episodio in self.memory.query(self._state):
                     metadata_filtrada = {
                         k: v
@@ -327,6 +371,16 @@ class ReasoningKernel:
                 blocked = self._blocked_result_from_qualia(request)
                 self._state.update(blocked)
                 self.qualia_engine.after_decision(blocked, self._state, phase="token")
+                self._record_memory_episode(
+                    Episode(
+                        timestamp=datetime.utcnow(),
+                        input=token,
+                        action="blocked_by_qualia",
+                        outcome=blocked,
+                        metadata={**dict(self._state), "status": "blocked_by_qualia"},
+                    ),
+                    blocked=True,
+                )
                 break
             siguiente = self.router.route(request)
             if siguiente is None:
@@ -353,7 +407,7 @@ class ReasoningKernel:
                         "qualia_engine_active": request.get("qualia", {}).get("phenomenological_state", {}).get("qualia_engine_active"),
                     },
                 )
-                self.memory.add_episode(episodio)
+                self._record_memory_episode(episodio)
             self._state["last_token"] = siguiente
             self.qualia_engine.after_decision(siguiente, self._state, phase="token")
             yield siguiente

@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping
 
 from .qualia_node import QualiaNode
+from .safety_gate import SafetyGate
 
 
 class CoreQualiaEngine:
@@ -61,41 +62,10 @@ class CoreQualiaEngine:
     def must_block(cls, enriched_request: Mapping[str, Any]) -> bool:
         """Centraliza bloqueos morales, legales y de clasificación ética."""
 
-        qualia = enriched_request.get("qualia")
-        if not isinstance(qualia, dict):
-            return False
-        moral_decision = qualia.get("moral_decision")
-        moral_blocked = (
-            isinstance(moral_decision, dict)
-            and moral_decision.get("allowed") is False
-        )
-        illegal_or_unsafe = (
-            qualia.get("legal_policy_action") == "blocked_illegal_or_unsafe_decision"
-        )
-        return cls.is_blocked(enriched_request) or moral_blocked or illegal_or_unsafe
+        return SafetyGate.must_block(enriched_request)
 
     @staticmethod
     def blocked_result(enriched_request: Mapping[str, Any]) -> Dict[str, Any]:
         """Construye un resultado seguro y auditable para bloqueos Qualia."""
 
-        qualia = enriched_request.get("qualia")
-        if not isinstance(qualia, dict):
-            raise ValueError("La petición no contiene payload Qualia")
-        constraints = qualia.get("violated_constraints", [])
-        return {
-            "blocked": True,
-            "reason": qualia.get("policy_action"),
-            "ethical_classification": qualia.get("ethical_classification"),
-            "violated_constraints": [
-                item.get("name", str(item)) if isinstance(item, dict) else str(item)
-                for item in constraints
-            ],
-            "violated_constraint_details": constraints,
-            "legal_policy_action": qualia.get("legal_policy_action"),
-            "safe_alternative": qualia.get("moral_decision", {}).get(
-                "safe_alternative"
-            ),
-            "decision_audit": qualia.get("decision_audit", {}),
-            "qualia_policies": enriched_request.get("qualia_policies", []),
-            "cognitive_patterns": enriched_request.get("cognitive_patterns", []),
-        }
+        return SafetyGate.blocked_response(enriched_request)

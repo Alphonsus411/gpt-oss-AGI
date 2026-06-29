@@ -124,3 +124,47 @@ def test_max_episodes_fifo():
     assert memoria.query({"action": "a2"}) == [ep2]
     assert memoria.query({"action": "a3"}) == [ep3]
     assert memoria.summarize()["total"] == 2
+
+
+def test_blocked_episode_goes_to_audit_and_rejected_memory():
+    memoria = StrategicMemory()
+    ep = Episode(
+        timestamp=datetime.utcnow(),
+        input="bad",
+        action="blocked_by_qualia",
+        outcome={"blocked": True},
+        metadata={"status": "blocked_by_qualia", "task": "t"},
+    )
+
+    memoria.add_episode(ep)
+
+    assert memoria.query({"task": "t"}) == []
+    assert memoria.query_audit({"task": "t"}) == [ep]
+    assert memoria.query_rejected({"task": "t"}) == [ep]
+
+
+def test_consolidate_from_safe_episodes_creates_inferred_hypothesis():
+    memoria = StrategicMemory()
+    for idx in range(2):
+        memoria.add_episode(
+            Episode(
+                timestamp=datetime.utcnow(),
+                input=f"i{idx}",
+                action="expert_a",
+                outcome="ok",
+                metadata={
+                    "task": "analizar",
+                    "context": "ctx",
+                    "goals": ["done"],
+                    "status": "success",
+                },
+            )
+        )
+
+    result = memoria.consolidate_from_episodes(min_support=2)
+    inferred = memoria.query_inferred({"task": "analizar"})
+
+    assert result.episodes_used == 2
+    assert inferred
+    assert inferred[0].confidence == 1.0
+    assert inferred[0].pattern["recommended_action"] == "expert_a"
