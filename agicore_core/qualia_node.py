@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import importlib.util
 import json
 import sys
 from dataclasses import dataclass, field
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
 from .agix_adapters import AgixEvolutionAdapters
+from .agix_compat import build_compatibility_report, load_first_component, module_available
 from .config import AGIX_REQUIRED_VERSION
 
 
@@ -40,15 +40,6 @@ class MoralConstraint:
     description: str
     severity: str = "block"
     keywords: tuple[str, ...] = field(default_factory=tuple)
-
-
-def _module_available(name: str) -> bool:
-    if name in sys.modules:
-        return True
-    try:
-        return importlib.util.find_spec(name) is not None
-    except (ImportError, ValueError):
-        return False
 
 
 def _load_profile() -> Dict[str, Any]:
@@ -94,11 +85,20 @@ class QualiaNode:
         self._spirit = None
         self._qualia_engine = None
         self._memory_manager = None
-        self._agix_version = self._detect_agix_version()
-        self._version_compatible = self._agix_version == self.required_agix_version
         self.version_mismatch_policy = str(
             self.profile.get("version_mismatch_policy", "block_advanced")
         )
+        self.compatibility_report = build_compatibility_report(
+            required_version=self.required_agix_version,
+            version_mismatch_policy=self.version_mismatch_policy,
+        )
+        self._agix_version = self.compatibility_report.detected_version
+        self._version_compatible = self.compatibility_report.version_compatible
+        if self.profile.get("require_agix_runtime", False) and not self._version_compatible:
+            raise RuntimeError(
+                f"AGIX {self.required_agix_version} es obligatorio; "
+                f"detectado={self._agix_version!r}"
+            )
         advanced_enabled = self._advanced_agix_enabled()
         self._evolution = AgixEvolutionAdapters(
             enable_genetic_algorithms=advanced_enabled
@@ -211,44 +211,48 @@ class QualiaNode:
             return "agix_version_mismatch_degraded"
         return "agix_version_mismatch_advanced_blocked"
 
-    def _detect_agix_version(self) -> str | None:
-        if not _module_available("agix"):
-            return None
-        metadata = importlib.import_module("importlib.metadata")
-        try:
-            return metadata.version("agix")
-        except metadata.PackageNotFoundError:
-            agix = importlib.import_module("agix")
-            return getattr(agix, "__version__", None)
-
     def _load_agix_components(self) -> None:
-        if not self.enabled or not _module_available("agix"):
+        if not self.enabled or not module_available("agix"):
             return
-        if _module_available("agix.qualia.ecoethics"):
-            eco_module = importlib.import_module("agix.qualia.ecoethics")
-            self._ecoethics = eco_module.EcoEthics()
-        if _module_available("agix.qualia.heuristic_spirit"):
-            spirit_module = importlib.import_module("agix.qualia.heuristic_spirit")
-            self._spirit = spirit_module.HeuristicQualiaSpirit("GPT-OSS-Qualia")
-        if _module_available("agix.memory"):
-            memory_module = importlib.import_module("agix.memory")
-            memory_cls = getattr(memory_module, "GestorDeMemoria", None)
-            if memory_cls is not None:
-                try:
-                    self._memory_manager = memory_cls()
-                except Exception:
-                    self._memory_manager = None
-        if _module_available("agix.qualia"):
-            qualia_module = importlib.import_module("agix.qualia")
-            engine_cls = getattr(qualia_module, "QualiaEngine", None)
-            if engine_cls is not None:
-                try:
-                    if self._memory_manager is not None:
-                        self._qualia_engine = engine_cls(self._memory_manager)
-                    else:
-                        self._qualia_engine = engine_cls()
-                except Exception:
-                    self._qualia_engine = None
+        eco_cls, _ = load_first_component(
+            "ecoethics", (("agix.qualia.ecoethics", "EcoEthics"),)
+        )
+        if eco_cls is not None:
+            try:
+                self._ecoethics = eco_cls()
+            except Exception:
+                self._ecoethics = None
+        spirit_cls, _ = load_first_component(
+            "qualia_spirit",
+            (
+                ("agix.qualia.spirit", "QualiaSpirit"),
+                ("agix.qualia.heuristic_spirit", "HeuristicQualiaSpirit"),
+            ),
+        )
+        if spirit_cls is not None:
+            try:
+                self._spirit = spirit_cls("GPT-OSS-Qualia")
+            except Exception:
+                self._spirit = None
+        memory_cls, _ = load_first_component(
+            "memory_manager", (("agix.memory", "GestorDeMemoria"),)
+        )
+        if memory_cls is not None:
+            try:
+                self._memory_manager = memory_cls()
+            except Exception:
+                self._memory_manager = None
+        engine_cls, _ = load_first_component(
+            "qualia_engine", (("agix.qualia", "QualiaEngine"),)
+        )
+        if engine_cls is not None:
+            try:
+                if self._memory_manager is not None:
+                    self._qualia_engine = engine_cls(self._memory_manager)
+                else:
+                    self._qualia_engine = engine_cls()
+            except Exception:
+                self._qualia_engine = None
 
     def enrich_request(
         self, request: Mapping[str, Any], *, phase: str
@@ -275,6 +279,7 @@ class QualiaNode:
             "agix_available": self._agix_version is not None,
             "version_compatible": self._version_compatible,
             "version_policy_action": version_policy_action,
+            "agix_compatibility_report": self.compatibility_report.as_dict(),
             "phase": phase,
             "policies": [policy.__dict__ for policy in self.policies],
             "cognitive_patterns": [pattern.__dict__ for pattern in self.patterns],
@@ -336,30 +341,41 @@ class QualiaNode:
         state["cognitive_patterns"] = [pattern.name for pattern in self.patterns]
         state["agix_version"] = self._agix_version
         state["agix_version_compatible"] = self._version_compatible
+        state["agix_compatibility_report"] = self.compatibility_report.as_dict()
         state["evolution_feedback"] = feedback
         return state
 
     def _evaluate_moral_constraints(
         self, request: Mapping[str, Any]
     ) -> List[Dict[str, Any]]:
-        searchable = " ".join(
-            str(request.get(key, ""))
-            for key in ("task", "context", "goals", "prompt", "instruction", "token")
-        ).lower()
+        fields = ("task", "context", "goals", "prompt", "instruction", "token")
+        field_values = {key: str(request.get(key, "")).lower() for key in fields}
         violations = []
         for constraint in self.moral_constraints:
-            matched = [
-                keyword
-                for keyword in constraint.keywords
-                if keyword.lower() in searchable
-            ]
+            matched = []
+            for field, value in field_values.items():
+                for keyword in constraint.keywords:
+                    normalized = keyword.lower()
+                    if normalized and normalized in value:
+                        matched.append(
+                            {
+                                "field": field,
+                                "keyword": keyword,
+                                "evidence": value[:160],
+                            }
+                        )
             if matched:
                 violations.append(
                     {
                         "name": constraint.name,
+                        "category": constraint.name,
                         "description": constraint.description,
                         "severity": constraint.severity,
-                        "matched_keywords": matched,
+                        "matched_keywords": [item["keyword"] for item in matched],
+                        "evidence": matched,
+                        "recommended_action": (
+                            "block" if constraint.severity == "block" else "warn"
+                        ),
                     }
                 )
         return violations

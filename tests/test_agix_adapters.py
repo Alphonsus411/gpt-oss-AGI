@@ -32,3 +32,28 @@ def test_genetic_agent_receives_configured_action_space_size(monkeypatch):
     assert created["action_space_size"] == 7
     assert signals["genetic_agent_active"] is True
     assert signals["genetic_signal"] == {"selected": "analizar"}
+
+
+def test_evolution_feedback_reward_reflects_blocked_result():
+    adapters = AgixEvolutionAdapters(
+        enable_genetic_algorithms=False,
+        enable_neuromorphic_patterns=False,
+    )
+
+    feedback = adapters.integrate_feedback({"blocked": True}, {})
+
+    assert feedback["reward"] == -1.0
+
+
+def test_evolution_feedback_rewards_goal_completion():
+    adapters = AgixEvolutionAdapters(
+        enable_genetic_algorithms=False,
+        enable_neuromorphic_patterns=False,
+    )
+
+    feedback = adapters.integrate_feedback(
+        {"done": True},
+        {"goals": ["done"], "done": True, "ethical_classification": "aceptable"},
+    )
+
+    assert feedback["reward"] > 0.5

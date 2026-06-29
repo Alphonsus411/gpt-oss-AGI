@@ -141,6 +141,8 @@ class ReasoningKernel:
         self.evaluator = evaluator
         self.memory = memory
         self.qualia_node = qualia_node or QualiaNode()
+        if hasattr(self.router, "_qualia_node") and getattr(self.router, "_qualia_node") is None:
+            self.router._qualia_node = self.qualia_node
         self._state: Dict[str, Any] = {}
         self.history: List[Dict[str, Any]] = []
         self._token_generator: Iterator[Any] | None = None
@@ -164,6 +166,7 @@ class ReasoningKernel:
             "violated_constraints": [
                 item["name"] for item in qualia.get("violated_constraints", [])
             ],
+            "violated_constraint_details": qualia.get("violated_constraints", []),
             "legal_policy_action": qualia.get("legal_policy_action"),
             "qualia_policies": request.get("qualia_policies", []),
             "cognitive_patterns": request.get("cognitive_patterns", []),
@@ -252,6 +255,12 @@ class ReasoningKernel:
                     "violated_constraints": request.get("violated_constraints", []),
                     "qualia_policies": request.get("qualia_policies", []),
                     "cognitive_patterns": request.get("cognitive_patterns", []),
+                    "qualia_phase": request.get("qualia", {}).get("phase"),
+                    "qualia_policy_action": request.get("qualia", {}).get("policy_action"),
+                    "qualia_legal_policy_action": request.get("qualia", {}).get("legal_policy_action"),
+                    "qualia_ethical_evidence": request.get("qualia", {}).get("ethical_evidence", {}),
+                    "qualia_evolutionary_signals": request.get("qualia", {}).get("evolutionary_signals", {}),
+                    "qualia_engine_active": request.get("qualia", {}).get("phenomenological_state", {}).get("qualia_engine_active"),
                 },
             )
             self.memory.add_episode(episodio)
@@ -314,6 +323,12 @@ class ReasoningKernel:
                         "violated_constraints": request.get("violated_constraints", []),
                         "qualia_policies": request.get("qualia_policies", []),
                         "cognitive_patterns": request.get("cognitive_patterns", []),
+                        "qualia_phase": request.get("qualia", {}).get("phase"),
+                        "qualia_policy_action": request.get("qualia", {}).get("policy_action"),
+                        "qualia_legal_policy_action": request.get("qualia", {}).get("legal_policy_action"),
+                        "qualia_ethical_evidence": request.get("qualia", {}).get("ethical_evidence", {}),
+                        "qualia_evolutionary_signals": request.get("qualia", {}).get("evolutionary_signals", {}),
+                        "qualia_engine_active": request.get("qualia", {}).get("phenomenological_state", {}).get("qualia_engine_active"),
                     },
                 )
                 self.memory.add_episode(episodio)
@@ -396,7 +411,7 @@ class ReasoningKernel:
                 self.history.append({"planning": "blocked", "result": result})
                 return self._state
             try:
-                plan = self.planner.plan(self._state)
+                plan = self.planner.plan(planning_request)
             except Exception as exc:  # pragma: no cover - planificación fallida
                 self.history.append({"error": str(exc)})
                 return self._state

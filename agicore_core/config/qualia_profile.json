@@ -148,5 +148,14 @@
   "genetic_agent": {
     "action_space_size": 4
   },
-  "neuromorphic_agent": {}
+  "neuromorphic_agent": {
+    "input_size": 2,
+    "output_size": 2
+  },
+  "require_agix_runtime": false,
+  "agix_runtime_modes": {
+    "local_safe": "AGIX no disponible; se aplican políticas locales.",
+    "degraded": "Versión AGIX no compatible; se desactivan capacidades avanzadas.",
+    "strict_compatible": "AGIX requerido y compatible activo."
+  }
 }

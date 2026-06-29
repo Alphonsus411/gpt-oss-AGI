@@ -79,7 +79,7 @@ class Planner:
             orquestador.
         """
         planning_state = dict(state)
-        if self.qualia_node is not None:
+        if self.qualia_node is not None and "qualia" not in planning_state:
             planning_state = self.qualia_node.enrich_request(
                 planning_state, phase="planning"
             )
@@ -96,7 +96,7 @@ class Planner:
                 return blocked_plan
         try:
             plan = self.orchestrator.broadcast_state(planning_state)
-            if self.qualia_node is not None:
+            if self.qualia_node is not None and "qualia" not in planning_state:
                 self.qualia_node.integrate_response(plan, planning_state, phase="planning")
             return plan
         except Exception:  # pragma: no cover - logging side effect
