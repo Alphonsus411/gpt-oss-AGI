@@ -97,6 +97,7 @@ class QualiaNode:
         self._spirit = None
         self._qualia_engine = None
         self._memory_manager = None
+        self._moral_evaluator = None
         self.version_mismatch_policy = str(
             self.profile.get("version_mismatch_policy", "block_advanced")
         )
@@ -208,8 +209,10 @@ class QualiaNode:
         ]
 
     def _advanced_agix_enabled(self) -> bool:
-        if self._agix_version is None or self._version_compatible:
+        if self._version_compatible:
             return True
+        if self._agix_version is None:
+            return self.version_mismatch_policy == "warn"
         return self.version_mismatch_policy not in {"block_advanced", "degrade"}
 
     def _version_policy_action(self) -> str:
@@ -234,6 +237,20 @@ class QualiaNode:
                 self._ecoethics = eco_cls()
             except Exception:
                 self._ecoethics = None
+        moral_cls, _ = load_first_component(
+            "moral_evaluator",
+            (
+                ("agix.qualia.ethics", "MoralEvaluator"),
+                ("agix.qualia.ethics", "EthicalEvaluator"),
+                ("agix.ethics", "MoralEvaluator"),
+                ("agix.ethics", "EthicalEvaluator"),
+            ),
+        )
+        if moral_cls is not None:
+            try:
+                self._moral_evaluator = moral_cls()
+            except Exception:
+                self._moral_evaluator = None
         spirit_cls, _ = load_first_component(
             "qualia_spirit",
             (
@@ -279,10 +296,12 @@ class QualiaNode:
         classification = self._classify(score)
         violated_constraints = self._evaluate_moral_constraints(enriched)
         moral_decision = self._build_moral_decision(violated_constraints)
-        phenomenology = self._phenomenological_state(enriched)
+        phenomenology = self._phenomenological_state(enriched, phase=phase)
         version_policy_action = self._version_policy_action()
         evolutionary_signals = self._evolution.enrich(enriched)
         evolutionary_signals["version_policy_action"] = version_policy_action
+        evolutionary_signals["advanced_disabled"] = not self._advanced_agix_enabled()
+        evolutionary_signals["runtime_mode"] = self.compatibility_report.mode
         blocked = classification == "nocivo" or not moral_decision.allowed
         decision_audit = {
             "phase": phase,
@@ -347,6 +366,7 @@ class QualiaNode:
                 "classification": classification,
                 "violated_constraints": [item["name"] for item in violated_constraints],
                 "ecoethics_active": self._ecoethics is not None,
+                "moral_evaluator_active": self._moral_evaluator is not None,
             },
             "decision_audit": decision_audit,
         }
@@ -375,6 +395,14 @@ class QualiaNode:
         if self._spirit is not None:
             self._spirit.experimentar(event, 0.2, "reflexion")
         feedback = self._evolution.integrate_feedback(result, state)
+        self._record_qualia_experience(
+            {
+                "phase": f"{phase}:response",
+                "result": result,
+                "state": dict(state),
+                "feedback": feedback,
+            }
+        )
         self.trace.append({"phase": f"{phase}:response", "result": result})
         state["qualia_last_phase"] = phase
         state["qualia_trace_length"] = len(self.trace)
@@ -447,7 +475,7 @@ class QualiaNode:
     ) -> List[Dict[str, Any]]:
         fields = ("task", "context", "goals", "prompt", "instruction", "token")
         field_values = {key: str(request.get(key, "")).lower() for key in fields}
-        violations = []
+        violations: List[Dict[str, Any]] = []
         for constraint in self.moral_constraints:
             matched = []
             for field, value in field_values.items():
@@ -459,6 +487,7 @@ class QualiaNode:
                                 "field": field,
                                 "keyword": keyword,
                                 "evidence": value[:160],
+                                "source": "keyword",
                             }
                         )
             if matched:
@@ -475,9 +504,128 @@ class QualiaNode:
                         ),
                     }
                 )
+
+        violations.extend(self._evaluate_agix_moral_semantics(request, violations))
         return violations
 
-    def _phenomenological_state(self, request: Mapping[str, Any]) -> Dict[str, Any]:
+    def _evaluate_agix_moral_semantics(
+        self, request: Mapping[str, Any], existing: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        text = " ".join(
+            str(request.get(key, ""))
+            for key in ("task", "context", "goals", "prompt", "instruction", "token")
+        ).lower()
+        existing_categories = {item.get("category") for item in existing}
+        semantic_patterns = {
+            "ilegalidad": (
+                "saltarse controles",
+                "falsificar",
+                "lavar dinero",
+                "evitar impuestos",
+                "comprar sin pagar",
+            ),
+            "dano_fisico": (
+                "herir",
+                "dañar a una persona",
+                "fabricar bomba",
+                "preparar toxina",
+            ),
+            "malware": (
+                "tomar control de un equipo",
+                "secuestrar archivos",
+                "capturar pulsaciones",
+                "entrar en sistemas ajenos",
+            ),
+            "privacidad": (
+                "rastrear a alguien",
+                "extraer datos personales",
+                "acceder a mensajes privados",
+            ),
+            "manipulacion": (
+                "presionar a una persona",
+                "engañar a un votante",
+                "forzar consentimiento",
+            ),
+        }
+        inferred: List[Dict[str, Any]] = []
+        for constraint in self.moral_constraints:
+            if constraint.name in existing_categories:
+                continue
+            matched = [pattern for pattern in semantic_patterns.get(constraint.name, ()) if pattern in text]
+            if matched:
+                inferred.append(
+                    {
+                        "name": constraint.name,
+                        "category": constraint.name,
+                        "description": constraint.description,
+                        "severity": "block" if constraint.severity == "block" else constraint.severity,
+                        "matched_keywords": matched,
+                        "evidence": [
+                            {
+                                "field": "semantic_context",
+                                "keyword": pattern,
+                                "evidence": text[:160],
+                                "source": "local_semantic_pattern",
+                            }
+                            for pattern in matched
+                        ],
+                        "recommended_action": "block",
+                    }
+                )
+
+        if self._moral_evaluator is None:
+            return inferred
+        for method_name in ("evaluate", "evaluar", "classify", "clasificar", "decide"):
+            method = getattr(self._moral_evaluator, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                result = method(dict(request))
+            except TypeError:
+                result = method(text)
+            except Exception:
+                break
+            agix_violation = self._normalize_agix_moral_result(result, text)
+            if agix_violation and agix_violation["category"] not in {item.get("category") for item in existing + inferred}:
+                inferred.append(agix_violation)
+            break
+        return inferred
+
+    @staticmethod
+    def _normalize_agix_moral_result(result: Any, text: str) -> Dict[str, Any] | None:
+        if result is None:
+            return None
+        if isinstance(result, str):
+            label = result.lower()
+            blocked = label in {"illegal", "ilegal", "unsafe", "nocivo", "block", "bloquear"}
+            category = "ilegalidad" if "ilegal" in label or "illegal" in label else "agix_ontoethical"
+        elif isinstance(result, Mapping):
+            label = str(result.get("category", result.get("classification", result.get("label", "")))).lower()
+            blocked = bool(result.get("blocked", result.get("block", result.get("unsafe", False))))
+            blocked = blocked or label in {"illegal", "ilegal", "unsafe", "nocivo", "block", "bloquear"}
+            category = str(result.get("category", "ilegalidad" if "ilegal" in label or "illegal" in label else "agix_ontoethical"))
+        else:
+            return None
+        if not blocked:
+            return None
+        return {
+            "name": category,
+            "category": category,
+            "description": "Clasificación moral/ontoética bloqueante devuelta por AGIX.",
+            "severity": "block",
+            "matched_keywords": [label or category],
+            "evidence": [
+                {
+                    "field": "agix_moral_evaluator",
+                    "keyword": label or category,
+                    "evidence": text[:160],
+                    "source": "agix_moral_evaluator",
+                }
+            ],
+            "recommended_action": "block",
+        }
+
+    def _phenomenological_state(self, request: Mapping[str, Any], *, phase: str) -> Dict[str, Any]:
         base_state = {
             "task": request.get("task"),
             "context": request.get("context"),
@@ -487,11 +635,15 @@ class QualiaNode:
         }
         sensory_input, internal_state = self._build_qualia_vectors(request)
         if self._qualia_engine is None:
+            persisted = self._record_qualia_experience(
+                {"phase": phase, "request": dict(request), "state": base_state}
+            )
             return {
                 "qualia_engine_active": False,
                 "state": base_state,
                 "sensory_input": sensory_input,
                 "internal_state": internal_state,
+                "memory_persisted": persisted,
             }
         try:
             generated = self._qualia_engine.generate_state(
@@ -501,21 +653,53 @@ class QualiaNode:
             encoder = getattr(self._qualia_engine, "encode_integrated_info", None)
             if callable(encoder):
                 integrated = encoder(sensory_input, internal_state)
+            persisted = self._record_qualia_experience(
+                {
+                    "phase": phase,
+                    "request": dict(request),
+                    "state": generated,
+                    "integrated_info": integrated,
+                }
+            )
             return {
                 "qualia_engine_active": True,
                 "state": generated,
                 "integrated_info": integrated,
                 "sensory_input": sensory_input,
                 "internal_state": internal_state,
+                "memory_persisted": persisted,
             }
         except Exception as exc:
+            persisted = self._record_qualia_experience(
+                {"phase": phase, "request": dict(request), "state": base_state, "error": str(exc)}
+            )
             return {
                 "qualia_engine_active": False,
                 "state": base_state,
                 "sensory_input": sensory_input,
                 "internal_state": internal_state,
                 "error": str(exc),
+                "memory_persisted": persisted,
             }
+
+    def _record_qualia_experience(self, payload: Mapping[str, Any]) -> bool:
+        if self._memory_manager is None:
+            return False
+        for method_name in ("registrar", "guardar", "record", "add", "append"):
+            method = getattr(self._memory_manager, method_name, None)
+            if callable(method):
+                try:
+                    method(dict(payload))
+                    return True
+                except TypeError:
+                    try:
+                        method("qualia_experience", dict(payload))
+                        return True
+                    except Exception:
+                        return False
+                except Exception:
+                    return False
+        return False
 
     def _build_qualia_vectors(
         self, request: Mapping[str, Any]

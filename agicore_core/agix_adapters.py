@@ -100,6 +100,25 @@ class AgixEvolutionAdapters:
                     except Exception as exc:
                         signals["genetic_error"] = str(exc)
                     break
+
+        if self.neuromorphic_agent is not None:
+            vector = self._build_neuromorphic_input(request)
+            for method_name in ("activate", "forward", "infer", "decide", "process"):
+                method = getattr(self.neuromorphic_agent, method_name, None)
+                if callable(method):
+                    try:
+                        signal = method(vector)
+                    except TypeError:
+                        try:
+                            signal = method(dict(request))
+                        except TypeError:
+                            signal = method()
+                    except Exception as exc:
+                        signals["neuromorphic_error"] = str(exc)
+                        break
+                    signals["neuromorphic_signal"] = signal
+                    self._merge_neuromorphic_signal(signals, signal)
+                    break
         return signals
 
     def integrate_feedback(
@@ -128,6 +147,24 @@ class AgixEvolutionAdapters:
         return feedback
 
     @staticmethod
+    def _build_neuromorphic_input(request: Mapping[str, Any]) -> list[float]:
+        text = " ".join(
+            str(request.get(key, ""))
+            for key in ("task", "context", "prompt", "instruction", "token")
+        )
+        goals = request.get("goals", [])
+        goals_count = len(goals) if isinstance(goals, list) else 1 if goals else 0
+        qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else {}
+        violations = request.get("violated_constraints", qualia.get("violated_constraints", []))
+        violation_count = len(violations) if isinstance(violations, list) else 1 if violations else 0
+        return [
+            min(len(text) / 1000.0, 1.0),
+            min(goals_count / 10.0, 1.0),
+            min(violation_count / 5.0, 1.0),
+            float(qualia.get("ethical_score", request.get("ethical_score", 0.0)) or 0.0),
+        ]
+
+    @staticmethod
     def _merge_genetic_signal(signals: Dict[str, Any], signal: Any) -> None:
         if not isinstance(signal, dict):
             return
@@ -143,6 +180,30 @@ class AgixEvolutionAdapters:
         for key in ("confidence", "mutation_rate", "exploration_bias", "neuromorphic_activation"):
             if key in signal:
                 signals[key] = float(signal[key])
+
+    @staticmethod
+    def _merge_neuromorphic_signal(signals: Dict[str, Any], signal: Any) -> None:
+        if isinstance(signal, dict):
+            signals["recommended_action"] = signal.get(
+                "recommended_action", signal.get("selected", signals["recommended_action"])
+            )
+            signals["selected_expert"] = signal.get(
+                "selected_expert", signal.get("expert", signals.get("selected_expert"))
+            )
+            if "confidence" in signal:
+                signals["confidence"] = float(signal["confidence"])
+            if "activation" in signal:
+                signals["neuromorphic_activation"] = float(signal["activation"])
+            if "neuromorphic_activation" in signal:
+                signals["neuromorphic_activation"] = float(signal["neuromorphic_activation"])
+            return
+        if isinstance(signal, (int, float)):
+            signals["neuromorphic_activation"] = float(signal)
+            return
+        if isinstance(signal, (list, tuple)) and signal:
+            numeric = [float(value) for value in signal if isinstance(value, (int, float))]
+            if numeric:
+                signals["neuromorphic_activation"] = sum(numeric) / len(numeric)
 
     @staticmethod
     def _merge_neuromorphic_feedback(feedback: Dict[str, Any], result: Any) -> None:

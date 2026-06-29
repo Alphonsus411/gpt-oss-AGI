@@ -155,3 +155,12 @@ el GPT no ejecutó la decisión.
 La versión objetivo de AGIX es `1.9.0`. Si el runtime detecta otra versión, el
 perfil Qualia puede degradar o bloquear capacidades avanzadas como señales
 genéticas y patrones neuromórficos mediante `version_mismatch_policy`.
+
+### Feedback posterior Qualia en rutas directas
+
+Cuando el enrutador se construye con `MetaRouter(qualia_node=QualiaNode())`, una
+petición sin payload Qualia se enriquece antes de seleccionar experto y, tras la
+ejecución, el resultado vuelve a `QualiaNode.integrate_response`. La memoria del
+router conserva `evolution_feedback`, `qualia_neuromorphic_feedback`, auditoría y
+fase Qualia para que decisiones futuras puedan ponderar trazas éticas y señales
+evolutivas.

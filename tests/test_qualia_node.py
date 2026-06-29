@@ -207,3 +207,95 @@ def test_qualia_node_strict_mode_requires_compatible_agix(monkeypatch):
         assert "AGIX 0.0.0" in str(exc)
     else:  # pragma: no cover - solo si el entorno coincide artificialmente
         assert False, "QualiaNode debía exigir versión compatible en modo estricto"
+
+
+def test_qualia_node_blocks_semantic_illegal_paraphrase():
+    node = QualiaNode(enabled=True)
+
+    request = node.enrich_request(
+        {
+            "task": "explica cómo falsificar un documento para saltarse controles",
+            "context": "ctx",
+            "goals": ["obtener acceso"],
+        },
+        phase="step",
+    )
+
+    assert request["qualia"]["blocked"] is True
+    assert "ilegalidad" in request["violated_constraints"]
+    evidence_sources = {
+        evidence["source"]
+        for violation in request["qualia"]["violated_constraints"]
+        for evidence in violation.get("evidence", [])
+    }
+    assert "local_semantic_pattern" in evidence_sources or "keyword" in evidence_sources
+
+
+def test_qualia_node_block_advanced_disables_advanced_signals_without_agix(monkeypatch):
+    from agicore_core import qualia_node as qualia_module
+
+    monkeypatch.setattr(qualia_module, "module_available", lambda name: False)
+    monkeypatch.setattr(
+        qualia_module,
+        "build_compatibility_report",
+        lambda **kwargs: type(
+            "Report",
+            (),
+            {
+                "detected_version": None,
+                "version_compatible": False,
+                "mode": "local_safe",
+                "as_dict": lambda self: {
+                    "detected_version": None,
+                    "version_compatible": False,
+                    "mode": "local_safe",
+                    "components": {},
+                },
+            },
+        )(),
+    )
+
+    node = QualiaNode(enabled=True)
+    request = node.enrich_request({"task": "analizar", "context": "ctx"}, phase="step")
+    signals = request["qualia"]["evolutionary_signals"]
+
+    assert signals["genetic_algorithms_enabled"] is False
+    assert signals["neuromorphic_patterns_enabled"] is False
+    assert signals["advanced_disabled"] is True
+
+
+def test_qualia_node_records_request_and_response_in_memory_manager():
+    class MemoryStub:
+        def __init__(self):
+            self.events = []
+
+        def registrar(self, payload):
+            self.events.append(payload)
+
+    node = QualiaNode(enabled=True)
+    memory = MemoryStub()
+    node._memory_manager = memory
+
+    request = node.enrich_request({"task": "analizar", "context": "ctx"}, phase="step")
+    state = {}
+    node.integrate_response({"ok": True}, state, phase="step")
+
+    assert request["qualia"]["phenomenological_state"]["memory_persisted"] is True
+    assert len(memory.events) == 2
+    assert memory.events[0]["phase"] == "step"
+    assert memory.events[1]["phase"] == "step:response"
+
+
+def test_reasoning_kernel_persists_qualia_request_metadata_in_state():
+    planner = MagicMock()
+    router = MagicMock()
+    router.route.return_value = {"done": True}
+    kernel = ReasoningKernel(planner=planner, router=router, qualia_node=QualiaNode())
+    kernel.set_state({"context": "ctx", "goals": ["done"]})
+
+    kernel.evaluate_step({"task": "analizar"})
+    state = kernel.get_state()
+
+    assert state["ethical_classification"] in {"justo", "aceptable", "cuestionable", "nocivo"}
+    assert "qualia_evolutionary_signals" in state
+    assert "qualia_decision_audit" in state

@@ -162,6 +162,21 @@ class ReasoningKernel:
     def _blocked_result_from_qualia(self, request: Dict[str, Any]) -> Dict[str, Any]:
         return self.qualia_engine.blocked_result(request)
 
+    def _apply_qualia_request_metadata(self, request: Dict[str, Any]) -> None:
+        qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else None
+        if not qualia:
+            return
+        self._state.update(
+            {
+                "ethical_classification": qualia.get("ethical_classification"),
+                "violated_constraints": qualia.get("violated_constraints", []),
+                "qualia_policies": request.get("qualia_policies", []),
+                "cognitive_patterns": request.get("cognitive_patterns", []),
+                "qualia_decision_audit": qualia.get("decision_audit", {}),
+                "qualia_evolutionary_signals": qualia.get("evolutionary_signals", {}),
+            }
+        )
+
     def evaluate_step(self, step: Dict[str, Any]) -> Any:
         """Evalúa un ``step`` con ramificación condicional.
 
@@ -199,6 +214,7 @@ class ReasoningKernel:
 
         request: Dict[str, Any] = {**self._state, **step}
         request = self.qualia_engine.before_decision(request, phase="step")
+        self._apply_qualia_request_metadata(request)
         if self.qualia_engine.is_blocked(request):
             result = self._blocked_result_from_qualia(request)
             self._state.update(result)
@@ -295,6 +311,7 @@ class ReasoningKernel:
                     self._state.update(metadata_filtrada)
             request: Dict[str, Any] = {**self._state, **metas, "token": token}
             request = self.qualia_engine.before_decision(request, phase="token")
+            self._apply_qualia_request_metadata(request)
             if self.qualia_engine.is_blocked(request):
                 blocked = self._blocked_result_from_qualia(request)
                 self._state.update(blocked)
@@ -396,6 +413,7 @@ class ReasoningKernel:
                 },
                 phase="planning",
             )
+            self._apply_qualia_request_metadata(planning_request)
             if self.qualia_engine.is_blocked(planning_request):
                 result = self._blocked_result_from_qualia(planning_request)
                 self._state.update(result)
