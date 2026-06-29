@@ -1,4 +1,4 @@
-"""Compatibilidad centralizada con AGIX 1.9.0.
+"""Compatibilidad centralizada con la versión AGIX requerida por el Core.
 
 Este módulo encapsula la detección de versión y la carga opcional de
 componentes de AGIX para que el Core pueda operar en modo estricto,
@@ -66,11 +66,11 @@ def module_available(name: str) -> bool:
 def detect_agix_version() -> str | None:
     """Devuelve la versión instalada de AGIX si está disponible."""
 
-    if not module_available("agix"):
-        return None
     try:
         return metadata.version("agix")
     except metadata.PackageNotFoundError:
+        if not module_available("agix"):
+            return None
         agix = importlib.import_module("agix")
         return getattr(agix, "__version__", None)
 
@@ -116,6 +116,12 @@ def build_compatibility_report(
         "virtual_qualia": (("agix.orchestrator", "VirtualQualia"),),
         "qualia_spirit": (("agix.qualia.spirit", "QualiaSpirit"), ("agix.qualia.heuristic_spirit", "HeuristicQualiaSpirit")),
         "ecoethics": (("agix.qualia.ecoethics", "EcoEthics"),),
+        "moral_evaluator": (
+            ("agix.qualia.ethics", "MoralEvaluator"),
+            ("agix.qualia.ethics", "EthicalEvaluator"),
+            ("agix.ethics", "MoralEvaluator"),
+            ("agix.ethics", "EthicalEvaluator"),
+        ),
     }
     for name, candidates in component_candidates.items():
         component, status = load_first_component(name, candidates)
@@ -157,15 +163,17 @@ def _validate_component(
         "virtual_qualia": ((), {}),
         "qualia_spirit": (("GPT-OSS-Qualia",), {}),
         "ecoethics": ((), {}),
+        "moral_evaluator": ((), {}),
     }
     expected_methods = {
-        "genetic_agent": ("evolve_policy", "select_action", "act"),
-        "neuromorphic_agent": ("update", "learn", "plasticity_update"),
+        "genetic_agent": ("perceive", "decide", "learn", "evolve_policy", "select_action", "act"),
+        "neuromorphic_agent": ("activate", "forward", "infer", "decide", "process", "update", "learn", "plasticity_update"),
         "qualia_engine": ("generate_state", "encode_integrated_info"),
         "memory_manager": ("guardar", "record", "add"),
         "virtual_qualia": ("broadcast_state",),
         "qualia_spirit": ("experimentar",),
         "ecoethics": ("evaluar", "clasificar"),
+        "moral_evaluator": ("evaluate", "evaluar", "classify", "clasificar", "decide"),
     }
     args, kwargs = constructors.get(name, ((), {}))
     try:

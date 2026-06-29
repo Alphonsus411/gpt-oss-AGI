@@ -88,16 +88,30 @@ class AgixEvolutionAdapters:
             "neuromorphic_activation": 0.0,
         }
         if self.genetic_agent is not None:
-            for method_name in ("evolve_policy", "select_action", "act"):
+            perception = request
+            perceive = getattr(self.genetic_agent, "perceive", None)
+            if callable(perceive):
+                try:
+                    perception = perceive(dict(request))
+                    signals["genetic_perception"] = perception
+                except TypeError:
+                    perception = perceive()
+                    signals["genetic_perception"] = perception
+                except Exception as exc:
+                    signals["genetic_error"] = str(exc)
+
+            for method_name in ("decide", "evolve_policy", "select_action", "act"):
                 method = getattr(self.genetic_agent, method_name, None)
                 if callable(method):
                     try:
-                        signal = method(dict(request))
+                        signal = method(perception)
                         signals["genetic_signal"] = signal
+                        signals["genetic_decision_method"] = method_name
                         self._merge_genetic_signal(signals, signal)
                     except TypeError:
                         signal = method()
                         signals["genetic_signal"] = signal
+                        signals["genetic_decision_method"] = method_name
                         self._merge_genetic_signal(signals, signal)
                     except Exception as exc:
                         signals["genetic_error"] = str(exc)
@@ -198,7 +212,8 @@ class AgixEvolutionAdapters:
     def validate_runtime_contract(self) -> Dict[str, Any]:
         """Devuelve el contrato AGIX activo y sus degradaciones auditables."""
 
-        genetic_methods = ("evolve_policy", "select_action", "act")
+        genetic_methods = ("decide", "evolve_policy", "select_action", "act")
+        genetic_perception_methods = ("perceive",)
         genetic_feedback_methods = (
             "learn",
             "update",
@@ -215,6 +230,7 @@ class AgixEvolutionAdapters:
                 enabled=self.enable_genetic_algorithms,
                 decision_methods=genetic_methods,
                 feedback_methods=genetic_feedback_methods,
+                perception_methods=genetic_perception_methods,
             ),
             "neuromorphic": self._component_contract(
                 self.neuromorphic_agent,
@@ -231,7 +247,17 @@ class AgixEvolutionAdapters:
         enabled: bool,
         decision_methods: tuple[str, ...],
         feedback_methods: tuple[str, ...],
+        perception_methods: tuple[str, ...] = (),
     ) -> Dict[str, Any]:
+        perception_available = (
+            tuple(
+                method
+                for method in perception_methods
+                if callable(getattr(agent, method, None))
+            )
+            if agent is not None
+            else ()
+        )
         decision_available = (
             tuple(
                 method
@@ -260,6 +286,7 @@ class AgixEvolutionAdapters:
         return {
             "enabled": enabled,
             "active": agent is not None,
+            "perception_methods": list(perception_available),
             "decision_methods": list(decision_available),
             "feedback_methods": list(feedback_available),
             "degraded": bool(degradations),

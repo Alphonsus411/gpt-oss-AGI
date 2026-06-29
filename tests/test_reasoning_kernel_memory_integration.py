@@ -63,3 +63,35 @@ def test_evaluate_step_records_episode():
     kernel.evaluate_step({})
     episodes = memory.query({"action": "step"})
     assert episodes and episodes[0].outcome == "ok"
+
+
+def test_token_cycle_restores_allowed_qualia_metadata():
+    memory = StrategicMemory()
+    memory.add_episode(
+        Episode(
+            timestamp=datetime.utcnow(),
+            input="",
+            action="token",
+            outcome="",
+            metadata={
+                "context": "cli",
+                "qualia_decision_audit": {"phase": "previous"},
+                "qualia_evolutionary_signals": {"confidence": 0.7},
+                "qualia_genetic_feedback": {"reward": 0.5},
+                "qualia_neuromorphic_feedback": {"activation_summary": 0.2},
+                "secret": "blocked",
+            },
+        )
+    )
+    router = DummyRouter()
+    kernel = ReasoningKernel(planner=None, router=router, memory=memory)
+    kernel.set_state({"context": "cli"})
+    kernel.start_token_cycle("a", {})
+    kernel.continue_token_cycle()
+    state = kernel.get_state()
+
+    assert state["qualia_decision_audit"]
+    assert state["qualia_evolutionary_signals"]
+    assert state["qualia_genetic_feedback"]
+    assert state["qualia_neuromorphic_feedback"]
+    assert "secret" not in state
