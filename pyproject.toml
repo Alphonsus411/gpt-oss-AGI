@@ -8,15 +8,16 @@ dependencies = [
   "aiohttp>=3.12.14",
   "chz>=0.3.0",
   "docker>=7.1.0",
-  "fastapi>=0.116.1",
+  "fastapi>=0.115,<0.116",
   "html2text>=2025.4.15",
   "lxml>=4.9.4",
   "pydantic>=2.11.7",
   "structlog>=25.4.0",
   "tenacity>=9.1.2",
-  "uvicorn>=0.35.0",
+  "uvicorn>=0.34,<0.35",
   "requests>=2.31.0",
   "termcolor",
+  "agix==1.9.0",
 ]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
