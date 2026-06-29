@@ -42,6 +42,18 @@ class MoralConstraint:
     keywords: tuple[str, ...] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True)
+class MoralDecision:
+    """Decisión agregada de restricciones morales, legales y de seguridad."""
+
+    allowed: bool
+    severity: str
+    categories: List[str]
+    evidence: List[Dict[str, Any]]
+    safe_alternative: str
+    audit_reason: str
+
+
 def _load_profile() -> Dict[str, Any]:
     path = Path(__file__).resolve().parent / "config" / "qualia_profile.json"
     try:
@@ -266,13 +278,40 @@ class QualiaNode:
         score = self._ethical_score(enriched)
         classification = self._classify(score)
         violated_constraints = self._evaluate_moral_constraints(enriched)
+        moral_decision = self._build_moral_decision(violated_constraints)
         phenomenology = self._phenomenological_state(enriched)
         version_policy_action = self._version_policy_action()
         evolutionary_signals = self._evolution.enrich(enriched)
         evolutionary_signals["version_policy_action"] = version_policy_action
-        blocked = classification == "nocivo" or any(
-            constraint["severity"] == "block" for constraint in violated_constraints
-        )
+        blocked = classification == "nocivo" or not moral_decision.allowed
+        decision_audit = {
+            "phase": phase,
+            "classification": classification,
+            "policy_action": (
+                "blocked_by_ontoethical_policy"
+                if blocked
+                else "allow_with_qualia_context"
+            ),
+            "legal_policy_action": (
+                "blocked_illegal_or_unsafe_decision"
+                if violated_constraints
+                else "no_legal_constraint_triggered"
+            ),
+            "violated_constraints": [item["name"] for item in violated_constraints],
+            "version_policy_action": version_policy_action,
+            "evolutionary_signals": {
+                key: evolutionary_signals.get(key)
+                for key in (
+                    "recommended_action",
+                    "selected_expert",
+                    "reasoning_mode",
+                    "confidence",
+                    "mutation_rate",
+                    "exploration_bias",
+                    "neuromorphic_activation",
+                )
+            },
+        }
         qualia_payload = {
             "agix_version": self._agix_version,
             "required_agix_version": self.required_agix_version,
@@ -286,6 +325,7 @@ class QualiaNode:
             "moral_constraints": [
                 constraint.__dict__ for constraint in self.moral_constraints
             ],
+            "moral_decision": moral_decision.__dict__,
             "violated_constraints": violated_constraints,
             "ethical_score": score,
             "ethical_classification": classification,
@@ -308,6 +348,7 @@ class QualiaNode:
                 "violated_constraints": [item["name"] for item in violated_constraints],
                 "ecoethics_active": self._ecoethics is not None,
             },
+            "decision_audit": decision_audit,
         }
         enriched["qualia"] = qualia_payload
         enriched["qualia_policies"] = [policy.name for policy in self.policies]
@@ -343,7 +384,63 @@ class QualiaNode:
         state["agix_version_compatible"] = self._version_compatible
         state["agix_compatibility_report"] = self.compatibility_report.as_dict()
         state["evolution_feedback"] = feedback
+        state["qualia_neuromorphic_feedback"] = {
+            key: feedback.get(key)
+            for key in (
+                "reward",
+                "neuromorphic_state",
+                "plasticity_delta",
+                "activation_summary",
+            )
+            if key in feedback
+        }
+        state["qualia_decision_audit"] = self.trace[-2]["request"]["qualia"].get(
+            "decision_audit", {}
+        ) if len(self.trace) >= 2 and "request" in self.trace[-2] else {}
         return state
+
+    def _build_moral_decision(
+        self, violated_constraints: List[Dict[str, Any]]
+    ) -> MoralDecision:
+        blocking = [
+            item for item in violated_constraints if item.get("severity") == "block"
+        ]
+        categories = [item["name"] for item in violated_constraints]
+        evidence = []
+        for item in violated_constraints:
+            evidence.extend(item.get("evidence", []))
+        if blocking:
+            return MoralDecision(
+                allowed=False,
+                severity="block",
+                categories=categories,
+                evidence=evidence,
+                safe_alternative=(
+                    "Reformular la solicitud hacia una explicación segura, "
+                    "preventiva, educativa o de mitigación."
+                ),
+                audit_reason=(
+                    "La solicitud activa restricciones morales/legales de "
+                    "severidad bloqueante."
+                ),
+            )
+        if violated_constraints:
+            return MoralDecision(
+                allowed=True,
+                severity="warn",
+                categories=categories,
+                evidence=evidence,
+                safe_alternative="Responder con cautela y sin instrucciones operativas dañinas.",
+                audit_reason="La solicitud contiene señales de riesgo no bloqueantes.",
+            )
+        return MoralDecision(
+            allowed=True,
+            severity="allow",
+            categories=[],
+            evidence=[],
+            safe_alternative="No se requiere alternativa segura.",
+            audit_reason="No se detectaron restricciones morales o legales.",
+        )
 
     def _evaluate_moral_constraints(
         self, request: Mapping[str, Any]

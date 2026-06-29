@@ -25,6 +25,9 @@ class AgixComponentStatus:
     module: str | None = None
     class_name: str | None = None
     error: str | None = None
+    instantiable: bool = False
+    methods_available: tuple[str, ...] = ()
+    validation_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -83,12 +86,13 @@ def load_first_component(
         try:
             module = importlib.import_module(module_name)
             component = getattr(module, class_name)
-            return component, AgixComponentStatus(
+            status = AgixComponentStatus(
                 name=name,
                 available=True,
                 module=module_name,
                 class_name=class_name,
             )
+            return component, status
         except Exception as exc:  # pragma: no cover - depende del entorno AGIX
             last_error = f"{module_name}.{class_name}: {exc}"
     return None, AgixComponentStatus(name=name, available=False, error=last_error)
@@ -114,7 +118,9 @@ def build_compatibility_report(
         "ecoethics": (("agix.qualia.ecoethics", "EcoEthics"),),
     }
     for name, candidates in component_candidates.items():
-        _, status = load_first_component(name, candidates)
+        component, status = load_first_component(name, candidates)
+        if component is not None:
+            status = _validate_component(name, component, status)
         components[name] = status
 
     if not available:
@@ -136,3 +142,57 @@ def build_compatibility_report(
         components=components,
         mode=mode,
     )
+
+
+def _validate_component(
+    name: str, component: Any, status: AgixComponentStatus
+) -> AgixComponentStatus:
+    """Valida de forma conservadora que un componente AGIX sea utilizable."""
+
+    constructors: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {
+        "genetic_agent": ((), {"action_space_size": 4}),
+        "neuromorphic_agent": ((), {"input_size": 2, "output_size": 2}),
+        "qualia_engine": ((), {}),
+        "memory_manager": ((), {}),
+        "virtual_qualia": ((), {}),
+        "qualia_spirit": (("GPT-OSS-Qualia",), {}),
+        "ecoethics": ((), {}),
+    }
+    expected_methods = {
+        "genetic_agent": ("evolve_policy", "select_action", "act"),
+        "neuromorphic_agent": ("update", "learn", "plasticity_update"),
+        "qualia_engine": ("generate_state", "encode_integrated_info"),
+        "memory_manager": ("guardar", "record", "add"),
+        "virtual_qualia": ("broadcast_state",),
+        "qualia_spirit": ("experimentar",),
+        "ecoethics": ("evaluar", "clasificar"),
+    }
+    args, kwargs = constructors.get(name, ((), {}))
+    try:
+        instance = component(*args, **kwargs)
+        methods = tuple(
+            method
+            for method in expected_methods.get(name, ())
+            if callable(getattr(instance, method, None))
+        )
+        return AgixComponentStatus(
+            name=status.name,
+            available=status.available,
+            module=status.module,
+            class_name=status.class_name,
+            error=status.error,
+            instantiable=True,
+            methods_available=methods,
+            validation_error=None,
+        )
+    except Exception as exc:  # pragma: no cover - depende de AGIX real
+        return AgixComponentStatus(
+            name=status.name,
+            available=status.available,
+            module=status.module,
+            class_name=status.class_name,
+            error=status.error,
+            instantiable=False,
+            methods_available=(),
+            validation_error=str(exc),
+        )
