@@ -290,7 +290,8 @@ def test_meta_router_records_blocked_qualia_episode():
     })
 
     assert result["blocked"] is True
-    assert memory._episodes[-1].metadata["status"] == "blocked_by_qualia"
+    assert memory.query_audit({"status": "blocked_by_qualia"})[-1].metadata["status"] == "blocked_by_qualia"
+    assert memory.query({"status": "blocked_by_qualia"}) == []
 
 
 def test_meta_router_enriches_direct_requests_with_qualia_node():

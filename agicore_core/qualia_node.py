@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
 from .agix_adapters import AgixEvolutionAdapters
+from .agix_cognitive_adapters import AgixCognitiveAdapters
 from .agix_compat import build_compatibility_report, load_first_component, module_available
 from .config import AGIX_REQUIRED_VERSION
 
@@ -141,6 +142,7 @@ class QualiaNode:
             genetic_config=self.profile.get("genetic_agent", {"action_space_size": 4}),
             neuromorphic_config=self.profile.get("neuromorphic_agent", {}),
         )
+        self._cognition = AgixCognitiveAdapters(enabled=advanced_enabled)
         self._load_agix_components()
         self._strict_runtime_errors = self._validate_strict_runtime()
         if (
@@ -165,6 +167,7 @@ class QualiaNode:
         if contract is None:
             contract = self._evolution.validate_runtime_contract()
         payload["evolution_contract"] = contract
+        payload["cognitive_contract"] = self._cognition.validate_runtime_contract()
         return payload
 
     def _validate_strict_runtime(self) -> List[str]:
@@ -369,6 +372,7 @@ class QualiaNode:
         )
         evolutionary_signals["advanced_disabled"] = not self._advanced_agix_enabled()
         evolutionary_signals["runtime_mode"] = self.compatibility_report.mode
+        cognitive_signals = self._cognition.enrich(enriched)
         blocked = classification == "nocivo" or not moral_decision.allowed
         decision_audit = {
             "phase": phase,
@@ -397,6 +401,16 @@ class QualiaNode:
                     "neuromorphic_activation",
                 )
             },
+            "cognitive_signals": {
+                key: cognitive_signals.get(key)
+                for key in (
+                    "concepts",
+                    "attention_focus",
+                    "emotional_state",
+                    "latent_state",
+                    "evaluation_metrics",
+                )
+            },
         }
         qualia_payload = {
             "agix_version": self._agix_version,
@@ -419,6 +433,7 @@ class QualiaNode:
             "ethical_classification": classification,
             "phenomenological_state": phenomenology,
             "evolutionary_signals": evolutionary_signals,
+            "cognitive_signals": cognitive_signals,
             "blocked": blocked,
             "policy_action": (
                 "blocked_by_ontoethical_policy"
@@ -464,6 +479,8 @@ class QualiaNode:
         if self._spirit is not None:
             self._spirit.experimentar(event, 0.2, "reflexion")
         feedback = self._evolution.integrate_feedback(result, state)
+        cognitive_feedback = self._cognition.integrate_feedback(result, state)
+        feedback["cognitive_feedback"] = cognitive_feedback
         self._record_qualia_experience(
             {
                 "phase": f"{phase}:response",
@@ -504,6 +521,7 @@ class QualiaNode:
             )
             if key in feedback
         }
+        state["qualia_cognitive_feedback"] = cognitive_feedback
         state["qualia_decision_audit"] = self.trace[-2]["request"]["qualia"].get(
             "decision_audit", {}
         ) if len(self.trace) >= 2 and "request" in self.trace[-2] else {}
@@ -775,23 +793,27 @@ class QualiaNode:
             }
 
     def _record_qualia_experience(self, payload: Mapping[str, Any]) -> bool:
+        return bool(self._call_memory_manager(payload).get("memory_persisted"))
+
+    def _call_memory_manager(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
         if self._memory_manager is None:
-            return False
+            return {"memory_persisted": False, "memory_error": None}
         for method_name in ("registrar", "guardar", "record", "add", "append"):
             method = getattr(self._memory_manager, method_name, None)
-            if callable(method):
+            if not callable(method):
+                continue
+            try:
+                method(dict(payload))
+                return {"memory_persisted": True, "memory_method": method_name}
+            except TypeError:
                 try:
-                    method(dict(payload))
-                    return True
-                except TypeError:
-                    try:
-                        method("qualia_experience", dict(payload))
-                        return True
-                    except Exception:
-                        return False
-                except Exception:
-                    return False
-        return False
+                    method("qualia_experience", dict(payload))
+                    return {"memory_persisted": True, "memory_method": method_name}
+                except Exception as exc:
+                    return {"memory_persisted": False, "memory_method": method_name, "memory_error": str(exc)}
+            except Exception as exc:
+                return {"memory_persisted": False, "memory_method": method_name, "memory_error": str(exc)}
+        return {"memory_persisted": False, "memory_error": "no_supported_method"}
 
     def _build_qualia_vectors(
         self, request: Mapping[str, Any]

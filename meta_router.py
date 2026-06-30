@@ -227,15 +227,19 @@ class MetaRouter:
             "latency": 0.0,
         }
         metadata.update(self._qualia_metadata(request, state))
-        self._memory.add_episode(
-            Episode(
-                timestamp=datetime.now(),
-                input=request,
-                action="blocked_by_qualia",
-                outcome=result,
-                metadata=metadata,
-            )
+        episode = Episode(
+            timestamp=datetime.now(),
+            input=request,
+            action="blocked_by_qualia",
+            outcome=result,
+            metadata=metadata,
         )
+        if hasattr(self._memory, "add_rejected_learning"):
+            self._memory.add_rejected_learning(episode, reason="blocked_by_qualia")
+        elif hasattr(self._memory, "add_audit_episode"):
+            self._memory.add_audit_episode(episode)
+        else:
+            self._memory.add_episode(episode)
 
     def route(
         self,

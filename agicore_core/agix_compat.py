@@ -122,6 +122,15 @@ def build_compatibility_report(
             ("agix.ethics", "MoralEvaluator"),
             ("agix.ethics", "EthicalEvaluator"),
         ),
+        "meta_learner": (("agix.learning.meta", "MetaLearner"), ("agix.learning", "MetaLearner")),
+        "ontology": (("agix.memory", "Ontology"), ("agix.reasoning", "Ontology")),
+        "latent_representation": (("agix.memory", "LatentRepresentation"), ("agix.reasoning", "LatentRepresentation")),
+        "neuro_symbolic_bridge": (("agix.reasoning", "NeuroSymbolicBridge"),),
+        "evaluation_metrics": (("agix.evaluation", "EvaluationMetrics"),),
+        "concept_classifier": (("agix.memory", "ConceptClassifier"), ("agix.reasoning", "ConceptClassifier")),
+        "heuristic_concept_creator": (("agix.memory", "HeuristicConceptCreator"), ("agix.reasoning", "HeuristicConceptCreator")),
+        "emotion_simulator": (("agix.emotion.emotion_simulator", "EmotionSimulator"),),
+        "attention_focus": (("agix.perception.attention", "AttentionFocus"),),
     }
     for name, candidates in component_candidates.items():
         component, status = load_first_component(name, candidates)
@@ -164,16 +173,34 @@ def _validate_component(
         "qualia_spirit": (("GPT-OSS-Qualia",), {}),
         "ecoethics": ((), {}),
         "moral_evaluator": ((), {}),
+        "meta_learner": ((), {}),
+        "ontology": ((), {}),
+        "latent_representation": ((), {}),
+        "neuro_symbolic_bridge": ((), {}),
+        "evaluation_metrics": ((), {}),
+        "concept_classifier": ((), {}),
+        "heuristic_concept_creator": ((), {}),
+        "emotion_simulator": ((), {}),
+        "attention_focus": ((), {}),
     }
     expected_methods = {
         "genetic_agent": ("perceive", "decide", "learn", "evolve_policy", "select_action", "act"),
         "neuromorphic_agent": ("activate", "forward", "infer", "decide", "process", "update", "learn", "plasticity_update"),
         "qualia_engine": ("generate_state", "encode_integrated_info"),
-        "memory_manager": ("guardar", "record", "add"),
+        "memory_manager": ("registrar", "guardar", "record", "add"),
         "virtual_qualia": ("broadcast_state",),
         "qualia_spirit": ("experimentar",),
         "ecoethics": ("evaluar", "clasificar"),
         "moral_evaluator": ("evaluate", "evaluar", "classify", "clasificar", "decide"),
+        "meta_learner": ("learn", "update", "adapt", "fit", "meta_update"),
+        "ontology": ("add_concept", "query", "relate", "infer"),
+        "latent_representation": ("encode", "decode", "transform", "project"),
+        "neuro_symbolic_bridge": ("encode", "decode", "bridge", "translate"),
+        "evaluation_metrics": ("evaluate", "calcular", "score", "compute"),
+        "concept_classifier": ("classify", "clasificar", "predict"),
+        "heuristic_concept_creator": ("create", "crear", "generate", "infer"),
+        "emotion_simulator": ("simulate", "simular", "evaluate", "infer"),
+        "attention_focus": ("focus", "attend", "select", "prioritize"),
     }
     args, kwargs = constructors.get(name, ((), {}))
     try:

@@ -74,3 +74,16 @@ Si un despliegue AGIX usa otra dimensión, `AgixEvolutionAdapters` ajusta el
 vector al `input_size` configurado mediante truncado explícito o relleno con
 ceros, y expone `neuromorphic_input_size` y `neuromorphic_input_vector` en las
 señales auditables.
+
+## Integración estructurada de capacidades AGIX adicionales
+
+El Core ahora separa las capacidades AGIX en capas auditables:
+
+1. **Compatibilidad**: `agicore_core.agix_compat` detecta los componentes documentados en AGIX 1.9.0, incluidos `MetaLearner`, `Ontology`, `LatentRepresentation`, `NeuroSymbolicBridge`, `EvaluationMetrics`, `ConceptClassifier`, `HeuristicConceptCreator`, `EmotionSimulator` y `AttentionFocus`.
+2. **Adaptadores cognitivos**: `AgixCognitiveAdapters` normaliza conceptos, foco atencional, estados emocionales, representaciones latentes y métricas de evaluación. Si AGIX no está instalado, devuelve señales locales seguras y degradación explícita.
+3. **SafetyGate**: centraliza el bloqueo moral/legal para que router, planner, inferencia, entrenamiento y generación puedan consultar la misma decisión Qualia antes de tocar el GPT.
+4. **Memoria inferencial**: `StrategicMemory` separa episodios utilizables, auditoría y aprendizaje rechazado. Las hipótesis inferidas solo se consolidan desde episodios permitidos.
+5. **Training bridge**: `QualiaTrainingBridge` filtra señales de entrenamiento/evaluación antes de convertirlas en episodios de memoria o feedback adaptativo.
+6. **Puente neuro-simbólico**: `CoreNeuroSymbolicBridge` expone una interfaz estable para extraer conceptos y representaciones neuro-simbólicas con fallback local.
+
+Las políticas morales siguen siendo rígidas: cualquier payload con `blocked`, `blocked_illegal_or_unsafe_decision` o decisión moral `allowed=false` queda excluido de router/backend y no alimenta memoria inferencial ni señales de entrenamiento.
