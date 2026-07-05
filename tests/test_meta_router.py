@@ -17,6 +17,20 @@ class DummyModule:
         return "ok"
 
 
+def test_meta_router_imports_before_agicore_core_package():
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "from meta_router import MetaRouter; print(MetaRouter.__name__)"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.stdout.strip() == "MetaRouter"
+
+
 def test_register_duplicate_name_raises_error():
     router = MetaRouter()
     dummy = DummyModule()
