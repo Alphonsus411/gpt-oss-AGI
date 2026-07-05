@@ -42,8 +42,60 @@ def test_planner_acepta_orquestador_explicito_sin_importar_agix(monkeypatch):
         def broadcast_state(self, state):
             return [{"state": state}]
 
-    monkeypatch.setattr(planner_module, "_load_virtual_qualia", fail_load_virtual_qualia)
+    monkeypatch.setattr(
+        planner_module, "_load_virtual_qualia", fail_load_virtual_qualia
+    )
 
     planificador = planner_module.Planner(orchestrator=DummyOrchestrator())
 
     assert planificador.plan({"goal": "test"}) == [{"state": {"goal": "test"}}]
+
+
+def test_planner_blocks_existing_qualia_before_broadcast():
+    """El planificador debe respetar bloqueos Qualia ya enriquecidos."""
+
+    from agicore_core import planner as planner_module
+
+    class DummyOrchestrator:
+        def __init__(self):
+            self.calls = []
+
+        def broadcast_state(self, state):
+            self.calls.append(state)
+            return [{"state": state}]
+
+    class DummyQualiaNode:
+        def __init__(self):
+            self.integrated = []
+
+        def enrich_request(self, state, phase):  # pragma: no cover - no debe llamarse
+            raise AssertionError("No debe reenriquecer Qualia existente")
+
+        def integrate_response(self, response, state, phase):
+            self.integrated.append((response, state, phase))
+
+    orchestrator = DummyOrchestrator()
+    qualia_node = DummyQualiaNode()
+    planificador = planner_module.Planner(
+        orchestrator=orchestrator, qualia_node=qualia_node
+    )
+    state = {
+        "goal": "test",
+        "qualia": {
+            "blocked": True,
+            "policy_action": "blocked_by_ontoethical_policy",
+            "ethical_classification": "unsafe",
+            "violated_constraints": ["constraint"],
+        },
+    }
+
+    assert planificador.plan(state) == [
+        {
+            "blocked": True,
+            "reason": "blocked_by_ontoethical_policy",
+            "ethical_classification": "unsafe",
+            "violated_constraints": ["constraint"],
+        }
+    ]
+    assert orchestrator.calls == []
+    assert qualia_node.integrated
