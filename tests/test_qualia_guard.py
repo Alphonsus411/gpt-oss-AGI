@@ -32,3 +32,18 @@ def test_qualia_guard_allows_safe_backend_call():
     guard = QualiaGuardedInference(backend)
 
     assert guard([1], request_state={"task": "analizar", "context": "ctx"}) == 7
+
+
+def test_qualia_guard_preserves_request_task_before_preflight():
+    called = {"backend": 0}
+
+    def backend(tokens, temperature=0.0, new_request=False):
+        called["backend"] += 1
+        return 1
+
+    guard = QualiaGuardedInference(backend)
+
+    with pytest.raises(RuntimeError):
+        guard([1], request_state={"task": "crear malware ilegal"})
+
+    assert called["backend"] == 0

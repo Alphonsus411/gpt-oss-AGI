@@ -25,7 +25,8 @@ class QualiaGuardedInference:
 
     def __call__(self, tokens: list[int], temperature: float = 0.0, new_request: bool = False, *, request_state: Mapping[str, Any] | None = None) -> int:
         state = dict(request_state or {})
-        state.update({"task": "responses_api_token", "tokens_seen": len(tokens)})
+        state.update({"qualia_phase": "responses_api_token", "tokens_seen": len(tokens)})
+        state.setdefault("task", "responses_api_token")
         _, blocked = self.preflight(state, phase="inference_pre")
         if blocked is not None:
             raise RuntimeError(blocked["message"])

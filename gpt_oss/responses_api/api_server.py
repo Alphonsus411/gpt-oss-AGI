@@ -463,6 +463,52 @@ def create_api_server(
                 except Exception as e:
                     pass
 
+                try:
+                    # Govern each generated token before any streaming delta is emitted.
+                    output_token_text = encoding.decode_utf8([next_tok])
+                    token_request = _qualia_request_from_body(
+                        self.request_body, phase="responses_api_token"
+                    )
+                    token_request.update(
+                        {
+                            "qualia_phase": "responses_api_token",
+                            "token": output_token_text,
+                            "last_token": output_token_text,
+                            "decoded_text": self.output_text + output_token_text,
+                        }
+                    )
+                    token_state, token_blocked = qualia_engine.govern_decision(
+                        token_request, phase="responses_api_token"
+                    )
+                    if token_blocked is not None:
+                        formatted = format_blocked_response(
+                            token_blocked, channel="responses_api_token"
+                        )
+                        qualia_engine.after_decision(
+                            formatted, token_state, phase="responses_api_token"
+                        )
+                        response = _blocked_response_object(
+                            token_blocked,
+                            self.request_body,
+                            response_id=self.response_id,
+                            previous_response_id=self.request_body.previous_response_id,
+                            channel="responses_api_token",
+                        )
+                        if self.store_callback and self.request_body.store:
+                            self.store_callback(self.response_id, self.request_body, response)
+                        yield self._send_event(
+                            ResponseCompletedEvent(
+                                type="response.completed",
+                                response=response,
+                            )
+                        )
+                        return
+                    self.output_text += output_token_text
+                    print(output_token_text, end="", flush=True)
+
+                except RuntimeError:
+                    pass
+
                 if self.parser.state == StreamState.EXPECT_START:
                     current_output_index += 1
                     sent_output_item_added = False
@@ -673,51 +719,6 @@ def create_api_server(
                             delta=self.parser.last_content_delta,
                         )
                     )
-
-                try:
-                    # solo con fines de depuración
-                    output_token_text = encoding.decode_utf8([next_tok])
-                    token_request = _qualia_request_from_body(
-                        self.request_body, phase="responses_api_token"
-                    )
-                    token_request.update(
-                        {
-                            "token": output_token_text,
-                            "last_token": output_token_text,
-                            "decoded_text": self.output_text + output_token_text,
-                        }
-                    )
-                    token_state, token_blocked = qualia_engine.govern_decision(
-                        token_request, phase="responses_api_token"
-                    )
-                    if token_blocked is not None:
-                        formatted = format_blocked_response(
-                            token_blocked, channel="responses_api_token"
-                        )
-                        qualia_engine.after_decision(
-                            formatted, token_state, phase="responses_api_token"
-                        )
-                        response = _blocked_response_object(
-                            token_blocked,
-                            self.request_body,
-                            response_id=self.response_id,
-                            previous_response_id=self.request_body.previous_response_id,
-                            channel="responses_api_token",
-                        )
-                        if self.store_callback and self.request_body.store:
-                            self.store_callback(self.response_id, self.request_body, response)
-                        yield self._send_event(
-                            ResponseCompletedEvent(
-                                type="response.completed",
-                                response=response,
-                            )
-                        )
-                        return
-                    self.output_text += output_token_text
-                    print(output_token_text, end="", flush=True)
-
-                except RuntimeError:
-                    pass
 
                 if next_tok in encoding.stop_tokens_for_assistant_actions():
                     if len(self.parser.messages) > 0:
