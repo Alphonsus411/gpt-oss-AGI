@@ -133,3 +133,26 @@ def test_run_respects_iteration_limit():
     assert kernel.get_state()["count"] == 3
     assert "done" not in kernel.get_state()
     assert planner.calls == 3
+
+
+def test_run_preserves_task_when_planning_request_is_enriched():
+    """El kernel no debe sustituir la tarea real por el centinela de planificación."""
+
+    kernel, _, _ = make_kernel()
+
+    class CapturingPlanner:
+        def __init__(self):
+            self.seen_states = []
+
+        def plan(self, state):
+            self.seen_states.append(state)
+            return []
+
+    planner = CapturingPlanner()
+    kernel.planner = planner
+    kernel.set_state({"task": "solve-user-objective", "context": "ctx", "goals": []})
+
+    kernel.run(max_iterations=1)
+
+    assert planner.seen_states[0]["task"] == "solve-user-objective"
+    assert "qualia" in planner.seen_states[0]
