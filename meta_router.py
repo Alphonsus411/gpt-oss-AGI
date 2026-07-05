@@ -13,8 +13,22 @@ from datetime import datetime
 from time import perf_counter
 from typing import Any, Dict, List, Optional
 
-from agicore_core.qualia_engine import CoreQualiaEngine
 from gpt_oss.strategic_memory import Episode, StrategicMemory
+
+
+def _core_qualia_engine():
+    """Return ``CoreQualiaEngine`` without importing ``agicore_core`` at module load.
+
+    Importing :mod:`agicore_core.qualia_engine` while :mod:`meta_router` is
+    still being initialized can re-enter this module through
+    ``agicore_core.__init__`` -> ``agicore_core.kernel``.  Keeping this import
+    local lets ``from meta_router import MetaRouter`` finish defining the class
+    before Qualia helpers are resolved.
+    """
+
+    from agicore_core.qualia_engine import CoreQualiaEngine
+
+    return CoreQualiaEngine
 
 
 @dataclass
@@ -203,7 +217,7 @@ class MetaRouter:
 
     @staticmethod
     def _blocked_qualia_result(request: Dict[str, Any]) -> Dict[str, Any]:
-        return CoreQualiaEngine.blocked_result(request)
+        return _core_qualia_engine().blocked_result(request)
 
     def _record_blocked_episode(
         self,
@@ -276,7 +290,7 @@ class MetaRouter:
             raise ValueError("La clave 'goals' debe ser una lista de cadenas")
 
         qualia = request.get("qualia") if isinstance(request.get("qualia"), dict) else None
-        if qualia and CoreQualiaEngine.must_block(request):
+        if qualia and _core_qualia_engine().must_block(request):
             result = self._blocked_qualia_result(request)
             self._record_blocked_episode(request, result, task, context, goals)
             return result
