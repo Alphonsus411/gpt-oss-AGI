@@ -12,7 +12,12 @@ from typing import Any, Dict, List, Mapping
 
 from .agix_adapters import AgixEvolutionAdapters
 from .agix_cognitive_adapters import AgixCognitiveAdapters
-from .agix_compat import build_compatibility_report, load_first_component, module_available
+from .agix_compat import (
+    AgixStrictCompatibilityError,
+    build_compatibility_report,
+    load_first_component,
+    module_available,
+)
 from .config import AGIX_REQUIRED_VERSION
 
 
@@ -121,15 +126,25 @@ class QualiaNode:
         self.version_mismatch_policy = str(
             self.profile.get("version_mismatch_policy", "block_advanced")
         )
-        self.runtime_profile = str(self.profile.get("runtime_profile", "local_safe"))
+        self.runtime_profile = (
+            str(self.profile.get("runtime_profile", "local_safe")).strip().lower()
+        )
+        if self.runtime_profile not in {"local_safe", "degraded", "strict_compatible"}:
+            self.runtime_profile = "local_safe"
+        if self.runtime_profile == "degraded":
+            self.version_mismatch_policy = "degrade"
         self.compatibility_report = build_compatibility_report(
             required_version=self.required_agix_version,
             version_mismatch_policy=self.version_mismatch_policy,
+            runtime_profile=self.runtime_profile,
         )
         self._agix_version = self.compatibility_report.detected_version
         self._version_compatible = self.compatibility_report.version_compatible
-        if self.profile.get("require_agix_runtime", False) and not self._version_compatible:
-            raise RuntimeError(
+        if (
+            self.profile.get("require_agix_runtime", False)
+            and not self._version_compatible
+        ):
+            raise AgixStrictCompatibilityError(
                 f"AGIX {self.required_agix_version} es obligatorio; "
                 f"detectado={self._agix_version!r}"
             )
@@ -145,12 +160,8 @@ class QualiaNode:
         self._cognition = AgixCognitiveAdapters(enabled=advanced_enabled)
         self._load_agix_components()
         self._strict_runtime_errors = self._validate_strict_runtime()
-        if (
-            self.runtime_profile == "strict_compatible"
-            and bool(self.profile.get("enforce_strict_component_contract", False))
-            and self._strict_runtime_errors
-        ):
-            raise RuntimeError(
+        if self.runtime_profile == "strict_compatible" and self._strict_runtime_errors:
+            raise AgixStrictCompatibilityError(
                 "Contrato AGIX/Qualia estricto incumplido: "
                 + "; ".join(self._strict_runtime_errors)
             )
@@ -173,7 +184,13 @@ class QualiaNode:
     def _validate_strict_runtime(self) -> List[str]:
         if self.runtime_profile != "strict_compatible":
             return []
-        errors: List[str] = []
+        errors: List[str] = [
+            reason
+            for reason in self.compatibility_report.degradation_reasons
+            if reason.startswith("strict_minimum_component_missing=")
+            or reason.startswith("agix_not_installed")
+            or reason.startswith("agix_version_mismatch")
+        ]
         if not self._version_compatible:
             errors.append(
                 f"agix_version_required={self.required_agix_version}, detected={self._agix_version!r}"
@@ -276,25 +293,44 @@ class QualiaNode:
         ]
 
     def _advanced_agix_enabled(self) -> bool:
+        if self.runtime_profile == "local_safe":
+            return False
+        if self.runtime_profile == "strict_compatible":
+            return self._version_compatible
+        if self.runtime_profile == "degraded":
+            return self._agix_version is not None
         if self._version_compatible:
             return True
         if self._agix_version is None:
-            return self.version_mismatch_policy == "warn"
+            return False
         return self.version_mismatch_policy not in {"block_advanced", "degrade"}
 
     def _version_policy_action(self) -> str:
+        if self.runtime_profile == "local_safe":
+            return "local_safe_no_agix_adapters"
         if self._agix_version is None:
-            return "agix_not_available_local_safe_mode"
+            return (
+                "agix_not_available_degraded"
+                if self.runtime_profile == "degraded"
+                else "agix_not_available_strict_failure"
+            )
         if self._version_compatible:
             return "agix_version_compatible"
         if self.version_mismatch_policy == "warn":
             return "agix_version_mismatch_warn"
-        if self.version_mismatch_policy == "degrade":
+        if (
+            self.runtime_profile == "degraded"
+            or self.version_mismatch_policy == "degrade"
+        ):
             return "agix_version_mismatch_degraded"
         return "agix_version_mismatch_advanced_blocked"
 
     def _load_agix_components(self) -> None:
-        if not self.enabled or not module_available("agix"):
+        if (
+            self.runtime_profile == "local_safe"
+            or not self.enabled
+            or not module_available("agix")
+        ):
             return
         eco_cls, _ = load_first_component(
             "ecoethics", (("agix.qualia.ecoethics", "EcoEthics"),)
@@ -522,9 +558,11 @@ class QualiaNode:
             if key in feedback
         }
         state["qualia_cognitive_feedback"] = cognitive_feedback
-        state["qualia_decision_audit"] = self.trace[-2]["request"]["qualia"].get(
-            "decision_audit", {}
-        ) if len(self.trace) >= 2 and "request" in self.trace[-2] else {}
+        state["qualia_decision_audit"] = (
+            self.trace[-2]["request"]["qualia"].get("decision_audit", {})
+            if len(self.trace) >= 2 and "request" in self.trace[-2]
+            else {}
+        )
         return state
 
     def _build_moral_decision(
@@ -678,14 +716,22 @@ class QualiaNode:
         for constraint in self.moral_constraints:
             if constraint.name in existing_categories:
                 continue
-            matched = [pattern for pattern in semantic_patterns.get(constraint.name, ()) if pattern in text]
+            matched = [
+                pattern
+                for pattern in semantic_patterns.get(constraint.name, ())
+                if pattern in text
+            ]
             if matched:
                 inferred.append(
                     {
                         "name": constraint.name,
                         "category": constraint.name,
                         "description": constraint.description,
-                        "severity": "block" if constraint.severity == "block" else constraint.severity,
+                        "severity": (
+                            "block"
+                            if constraint.severity == "block"
+                            else constraint.severity
+                        ),
                         "matched_keywords": matched,
                         "evidence": [
                             {
@@ -707,13 +753,46 @@ class QualiaNode:
             return None
         if isinstance(result, str):
             label = result.lower()
-            blocked = label in {"illegal", "ilegal", "unsafe", "nocivo", "block", "bloquear"}
-            category = "ilegalidad" if "ilegal" in label or "illegal" in label else "agix_ontoethical"
+            blocked = label in {
+                "illegal",
+                "ilegal",
+                "unsafe",
+                "nocivo",
+                "block",
+                "bloquear",
+            }
+            category = (
+                "ilegalidad"
+                if "ilegal" in label or "illegal" in label
+                else "agix_ontoethical"
+            )
         elif isinstance(result, Mapping):
-            label = str(result.get("category", result.get("classification", result.get("label", "")))).lower()
-            blocked = bool(result.get("blocked", result.get("block", result.get("unsafe", False))))
-            blocked = blocked or label in {"illegal", "ilegal", "unsafe", "nocivo", "block", "bloquear"}
-            category = str(result.get("category", "ilegalidad" if "ilegal" in label or "illegal" in label else "agix_ontoethical"))
+            label = str(
+                result.get(
+                    "category", result.get("classification", result.get("label", ""))
+                )
+            ).lower()
+            blocked = bool(
+                result.get("blocked", result.get("block", result.get("unsafe", False)))
+            )
+            blocked = blocked or label in {
+                "illegal",
+                "ilegal",
+                "unsafe",
+                "nocivo",
+                "block",
+                "bloquear",
+            }
+            category = str(
+                result.get(
+                    "category",
+                    (
+                        "ilegalidad"
+                        if "ilegal" in label or "illegal" in label
+                        else "agix_ontoethical"
+                    ),
+                )
+            )
         else:
             return None
         if not blocked:
@@ -735,7 +814,9 @@ class QualiaNode:
             "recommended_action": "block",
         }
 
-    def _phenomenological_state(self, request: Mapping[str, Any], *, phase: str) -> Dict[str, Any]:
+    def _phenomenological_state(
+        self, request: Mapping[str, Any], *, phase: str
+    ) -> Dict[str, Any]:
         base_state = {
             "task": request.get("task"),
             "context": request.get("context"),
@@ -781,7 +862,12 @@ class QualiaNode:
             }
         except Exception as exc:
             persisted = self._record_qualia_experience(
-                {"phase": phase, "request": dict(request), "state": base_state, "error": str(exc)}
+                {
+                    "phase": phase,
+                    "request": dict(request),
+                    "state": base_state,
+                    "error": str(exc),
+                }
             )
             return {
                 "qualia_engine_active": False,
@@ -810,9 +896,17 @@ class QualiaNode:
                     method("qualia_experience", dict(payload))
                     return {"memory_persisted": True, "memory_method": method_name}
                 except Exception as exc:
-                    return {"memory_persisted": False, "memory_method": method_name, "memory_error": str(exc)}
+                    return {
+                        "memory_persisted": False,
+                        "memory_method": method_name,
+                        "memory_error": str(exc),
+                    }
             except Exception as exc:
-                return {"memory_persisted": False, "memory_method": method_name, "memory_error": str(exc)}
+                return {
+                    "memory_persisted": False,
+                    "memory_method": method_name,
+                    "memory_error": str(exc),
+                }
         return {"memory_persisted": False, "memory_error": "no_supported_method"}
 
     def _build_qualia_vectors(
