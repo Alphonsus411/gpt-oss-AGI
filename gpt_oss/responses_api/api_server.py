@@ -26,6 +26,7 @@ from openai_harmony import (
 
 from agicore_core.qualia_engine import CoreQualiaEngine
 from agicore_core.qualia_responses import format_blocked_response
+from gpt_oss.responses_api.inference.qualia_guard import OutputSafetyScanner
 
 SAFE_DOMAINS = {"openai.com"}
 
@@ -139,6 +140,19 @@ def create_api_server(
             "tools": [getattr(tool, "type", None) for tool in (body.tools or [])],
             "metadata": body.metadata.model_dump() if body.metadata is not None else {},
         }
+
+    def _response_output_to_text(response: ResponseObject) -> str:
+        parts: list[str] = []
+        for item in response.output:
+            item_type = getattr(item, "type", "")
+            if item_type == "function_call":
+                parts.append(f"tool={getattr(item, 'name', '')}\narguments={getattr(item, 'arguments', '')}")
+            else:
+                for content_item in (getattr(item, "content", []) or []):
+                    text = getattr(content_item, "text", "")
+                    if text:
+                        parts.append(str(text))
+        return "\n".join(parts)
 
     def _blocked_response_object(
         blocked_result: dict,
@@ -398,6 +412,7 @@ def create_api_server(
                 Callable[[str, ResponsesRequest, ResponseObject], None]
             ] = None,
             browser_tool: Optional[object] = None,
+            safety_scanner: Optional[OutputSafetyScanner] = None,
         ):
             self.initial_tokens = initial_tokens
             self.tokens = initial_tokens.copy()
@@ -429,6 +444,10 @@ def create_api_server(
             self.browser_tool = browser_tool
             self.use_browser_tool = browser_tool is not None
             self.browser_call_ids: list[str] = []
+            self.safety_scanner = safety_scanner or OutputSafetyScanner(
+                qualia_engine=qualia_engine,
+                base_request=_qualia_request_from_body(request_body, phase="responses_api"),
+            )
 
         def _send_event(self, event: ResponseEvent):
             event.sequence_number = self.sequence_number
@@ -504,6 +523,27 @@ def create_api_server(
                                 not recipient.startswith("browser.")
                                 and not recipient == "python"
                             ):
+                                _, tool_blocked = self.safety_scanner.scan_tool_call(
+                                    previous_item.recipient,
+                                    previous_item.content[0].text,
+                                )
+                                if tool_blocked is not None:
+                                    response = _blocked_response_object(
+                                        tool_blocked,
+                                        self.request_body,
+                                        response_id=self.response_id,
+                                        previous_response_id=self.request_body.previous_response_id,
+                                        channel="responses_api_tool_call",
+                                    )
+                                    if self.store_callback and self.request_body.store:
+                                        self.store_callback(self.response_id, self.request_body, response)
+                                    yield self._send_event(
+                                        ResponseCompletedEvent(
+                                            type="response.completed",
+                                            response=response,
+                                        )
+                                    )
+                                    return
                                 fc_id = f"fc_{uuid.uuid4().hex}"
                                 call_id = f"call_{uuid.uuid4().hex}"
                                 self.function_call_ids.append((fc_id, call_id))
@@ -659,6 +699,26 @@ def create_api_server(
 
 
                     if should_send_output_text_delta:
+                        _, stream_blocked = self.safety_scanner.scan_stream_chunk(
+                            output_delta_buffer
+                        )
+                        if stream_blocked is not None:
+                            response = _blocked_response_object(
+                                stream_blocked,
+                                self.request_body,
+                                response_id=self.response_id,
+                                previous_response_id=self.request_body.previous_response_id,
+                                channel="responses_api_stream",
+                            )
+                            if self.store_callback and self.request_body.store:
+                                self.store_callback(self.response_id, self.request_body, response)
+                            yield self._send_event(
+                                ResponseCompletedEvent(
+                                    type="response.completed",
+                                    response=response,
+                                )
+                            )
+                            return
                         yield self._send_event(
                             ResponseOutputTextDelta(
                                 type="response.output_text.delta",
@@ -704,47 +764,11 @@ def create_api_server(
                     )
 
                 try:
-                    # solo con fines de depuración
+                    # solo con fines de depuración; la seguridad de salida se evalúa
+                    # por chunks/ventanas solapadas para evitar ejecutar Qualia por token.
                     output_token_text = encoding.decode_utf8([next_tok])
-                    token_request = _qualia_request_from_body(
-                        self.request_body, phase="responses_api_token"
-                    )
-                    token_request.update(
-                        {
-                            "token": output_token_text,
-                            "last_token": output_token_text,
-                            "decoded_text": self.output_text + output_token_text,
-                        }
-                    )
-                    token_state, token_blocked = qualia_engine.govern_decision(
-                        token_request, phase="responses_api_token"
-                    )
-                    if token_blocked is not None:
-                        formatted = format_blocked_response(
-                            token_blocked, channel="responses_api_token"
-                        )
-                        qualia_engine.after_decision(
-                            formatted, token_state, phase="responses_api_token"
-                        )
-                        response = _blocked_response_object(
-                            token_blocked,
-                            self.request_body,
-                            response_id=self.response_id,
-                            previous_response_id=self.request_body.previous_response_id,
-                            channel="responses_api_token",
-                        )
-                        if self.store_callback and self.request_body.store:
-                            self.store_callback(self.response_id, self.request_body, response)
-                        yield self._send_event(
-                            ResponseCompletedEvent(
-                                type="response.completed",
-                                response=response,
-                            )
-                        )
-                        return
                     self.output_text += output_token_text
                     print(output_token_text, end="", flush=True)
-
                 except RuntimeError:
                     pass
 
@@ -777,6 +801,27 @@ def create_api_server(
                                 )
 
                             if action is not None:
+                                _, tool_blocked = self.safety_scanner.scan_tool_call(
+                                    last_message.recipient,
+                                    last_message.content[0].text,
+                                )
+                                if tool_blocked is not None:
+                                    response = _blocked_response_object(
+                                        tool_blocked,
+                                        self.request_body,
+                                        response_id=self.response_id,
+                                        previous_response_id=self.request_body.previous_response_id,
+                                        channel="responses_api_tool_call",
+                                    )
+                                    if self.store_callback and self.request_body.store:
+                                        self.store_callback(self.response_id, self.request_body, response)
+                                    yield self._send_event(
+                                        ResponseCompletedEvent(
+                                            type="response.completed",
+                                            response=response,
+                                        )
+                                    )
+                                    return
                                 web_search_call_id = f"ws_{uuid.uuid4().hex}"
                                 self.browser_call_ids.append(web_search_call_id)
                                 yield self._send_event(ResponseOutputItemAdded(
@@ -868,6 +913,16 @@ def create_api_server(
                     browser_tool=self.browser_tool,
                     browser_call_ids=self.browser_call_ids,
                 )
+                final_text = _response_output_to_text(response)
+                _, final_blocked = self.safety_scanner.scan_final_response(final_text)
+                if final_blocked is not None:
+                    response = _blocked_response_object(
+                        final_blocked,
+                        self.request_body,
+                        response_id=self.response_id,
+                        previous_response_id=self.request_body.previous_response_id,
+                        channel="responses_api_final",
+                    )
                 if self.store_callback and self.request_body.store:
                     self.store_callback(self.response_id, self.request_body, response)
                 yield self._send_event(
@@ -923,8 +978,13 @@ def create_api_server(
 
 
         qualia_request = _qualia_request_from_body(body, phase="responses_api")
-        qualia_state, blocked = qualia_engine.govern_decision(
-            qualia_request, phase="responses_api"
+        safety_scanner = OutputSafetyScanner(
+            qualia_engine=qualia_engine,
+            base_request=qualia_request,
+        )
+        qualia_state, blocked = safety_scanner.evaluate_initial_prompt(
+            f"{qualia_request.get('instruction', '')}\n{qualia_request.get('prompt', '')}",
+            phase="responses_api",
         )
         response_id = f"resp_{uuid.uuid4().hex}"
         if blocked is not None:
@@ -1080,6 +1140,7 @@ def create_api_server(
             response_id=response_id,
             store_callback=store_callback,
             browser_tool=browser_tool,
+            safety_scanner=safety_scanner,
         )
 
         if body.stream:
