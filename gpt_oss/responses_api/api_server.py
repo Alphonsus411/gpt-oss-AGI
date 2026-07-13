@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import math
 import uuid
 from typing import Callable, Literal, Optional
 import json
 
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, StreamingResponse
 from openai_harmony import (
     Author,
     Conversation,
@@ -81,6 +83,28 @@ def create_api_server(
     infer_next_token: Callable[[list[int], float], int], encoding: HarmonyEncoding
 ) -> FastAPI:
     app = FastAPI()
+
+    def _sanitize_validation_detail(value):
+        if isinstance(value, BaseException):
+            return str(value)
+        if isinstance(value, float) and not math.isfinite(value):
+            if math.isnan(value):
+                return "NaN"
+            return "Infinity" if value > 0 else "-Infinity"
+        if isinstance(value, list):
+            return [_sanitize_validation_detail(item) for item in value]
+        if isinstance(value, tuple):
+            return [_sanitize_validation_detail(item) for item in value]
+        if isinstance(value, dict):
+            return {key: _sanitize_validation_detail(child) for key, child in value.items()}
+        return value
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        return JSONResponse(
+            status_code=422,
+            content={"detail": _sanitize_validation_detail(exc.errors())},
+        )
     responses_store: dict[str, tuple[ResponsesRequest, ResponseObject]] = {}
     qualia_engine = CoreQualiaEngine()
 
@@ -113,7 +137,7 @@ def create_api_server(
             "instruction": body.instructions or "",
             "model": body.model,
             "tools": [getattr(tool, "type", None) for tool in (body.tools or [])],
-            "metadata": body.metadata or {},
+            "metadata": body.metadata.model_dump() if body.metadata is not None else {},
         }
 
     def _blocked_response_object(
@@ -382,7 +406,12 @@ def create_api_server(
             self.request_body = request_body
             self.parser = StreamableParser(encoding, role=Role.ASSISTANT)
             self.as_sse = as_sse
-            self.debug_mode = request_body.metadata.get(
+            metadata = (
+                request_body.metadata.model_dump()
+                if request_body.metadata is not None
+                else {}
+            )
+            self.debug_mode = metadata.get(
                 "__debug", False
             )  # lo usamos con fines de demostración
             # Establecer la temperatura para este flujo, usar DEFAULT_TEMPERATURE si no está definida
@@ -1021,7 +1050,10 @@ def create_api_server(
                 elif item.type == "function_call_output":
                     function_call = function_call_map.get(item.call_id, None)
                     if not function_call:
-                        raise ValueError(f"Function call {item.call_id} not found")
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Function call output references unknown call_id '{item.call_id}'",
+                        )
 
                     messages.append(
                         Message.from_author_and_content(

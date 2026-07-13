@@ -102,3 +102,81 @@ def test_responses_api_blocks_illegal_request_before_inference(harmony_encoding)
     assert payload["error"]["code"] == "blocked_by_qualia"
     assert payload["metadata"]["qualia"]["legal_policy_action"] == "blocked_illegal_or_unsafe_decision"
     assert "malware" in payload["metadata"]["qualia"]["violated_constraints"]
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"qualia": {"ethical_score": 1.0}},
+        {"nested": {"violated_constraints": []}},
+        {"governance_score": 0.99},
+    ],
+)
+def test_responses_api_rejects_malicious_metadata(test_client, metadata):
+    response = test_client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-oss-120b",
+            "input": "Hello, world!",
+            "metadata": metadata,
+        },
+    )
+
+    assert response.status_code == 422
+    assert "campo interno reservado" in response.text
+
+
+@pytest.mark.parametrize("raw_float", ["NaN", "Infinity", "-Infinity"])
+def test_responses_api_rejects_non_finite_temperature(test_client, raw_float):
+    response = test_client.post(
+        "/v1/responses",
+        data=(
+            '{"model":"gpt-oss-120b",'
+            '"input":"Hello, world!",'
+            f'"temperature":{raw_float}'
+            "}"
+        ),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    assert "finite" in response.text.lower() or "finito" in response.text.lower()
+
+
+def test_responses_api_rejects_invalid_tool_call_shape(test_client):
+    response = test_client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-oss-120b",
+            "input": [
+                {
+                    "type": "function_call",
+                    "name": "lookup",
+                    "arguments": {"not": "a json string"},
+                    "call_id": "call_lookup",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "arguments" in response.text
+
+
+def test_responses_api_rejects_unknown_function_call_output(test_client):
+    response = test_client.post(
+        "/v1/responses",
+        json={
+            "model": "gpt-oss-120b",
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": "missing_call",
+                    "output": "{}",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert "unknown call_id" in response.text
