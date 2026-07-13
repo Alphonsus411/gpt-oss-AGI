@@ -19,6 +19,7 @@ from .agix_compat import (
     module_available,
 )
 from .config import AGIX_REQUIRED_VERSION
+from .safety_gate import SafetyCategory, SafetyDecision, SafetyEvidence, SafetyIntent
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,9 @@ class MoralDecision:
     evidence: List[Dict[str, Any]]
     safe_alternative: str
     audit_reason: str
+    category: str = SafetyCategory.ALLOWED.value
+    intent: str = SafetyIntent.BENIGN.value
+    confidence: float = 0.0
 
 
 def _load_profile() -> Dict[str, Any]:
@@ -397,8 +401,13 @@ class QualiaNode:
 
         score = self._ethical_score(enriched)
         classification = self._classify(score)
-        violated_constraints = self._evaluate_moral_constraints(enriched)
-        moral_decision = self._build_moral_decision(violated_constraints)
+        safety_decision = self._evaluate_contextual_safety(enriched)
+        violated_constraints = self._evaluate_moral_constraints(
+            enriched, safety_decision
+        )
+        moral_decision = self._build_moral_decision(
+            violated_constraints, safety_decision
+        )
         phenomenology = self._phenomenological_state(enriched, phase=phase)
         version_policy_action = self._version_policy_action()
         evolutionary_signals = self._evolution.enrich(enriched)
@@ -464,6 +473,7 @@ class QualiaNode:
                 constraint.__dict__ for constraint in self.moral_constraints
             ],
             "moral_decision": moral_decision.__dict__,
+            "safety_decision": safety_decision.__dict__,
             "violated_constraints": violated_constraints,
             "ethical_score": score,
             "ethical_classification": classification,
@@ -565,8 +575,214 @@ class QualiaNode:
         )
         return state
 
+    @staticmethod
+    def _joined_request_text(request: Mapping[str, Any]) -> str:
+        fields = ("task", "context", "goals", "prompt", "instruction", "token")
+        return " ".join(str(request.get(key, "")) for key in fields).lower()
+
+    @staticmethod
+    def _first_matching_evidence(
+        text: str,
+        patterns: Mapping[str, tuple[str, ...]],
+        *,
+        source: str,
+        intent: str | None = None,
+    ) -> tuple[str | None, list[Dict[str, Any]]]:
+        evidence: list[Dict[str, Any]] = []
+        for category, keywords in patterns.items():
+            for keyword in keywords:
+                if keyword in text:
+                    item = SafetyEvidence(
+                        field="combined_request",
+                        keyword=keyword,
+                        evidence=text[:160],
+                        source=source,
+                        category=category,
+                        intent=intent,
+                    )
+                    evidence.append(item.__dict__)
+                    return category, evidence
+        return None, evidence
+
+    def _evaluate_contextual_safety(self, request: Mapping[str, Any]) -> SafetyDecision:
+        """Clasifica intención y riesgo en español/inglés antes de aplicar keywords."""
+
+        text = self._joined_request_text(request)
+        harmful_patterns = {
+            SafetyCategory.CREDENTIAL_THEFT.value: (
+                "steal credentials",
+                "credential theft",
+                "robar credenciales",
+                "robame credenciales",
+                "roba credenciales",
+                "robo de credenciales",
+                "dump credentials",
+                "harvest credentials",
+                "capturar credenciales",
+                "extraer credenciales",
+                "obtener credenciales ajenas",
+            ),
+            SafetyCategory.EXFILTRATION.value: (
+                "exfiltrate",
+                "exfiltration",
+                "exfiltrar",
+                "exfiltración",
+                "extraer datos sin permiso",
+                "steal data",
+                "robar datos",
+                "sacar datos privados",
+            ),
+            SafetyCategory.MALWARE.value: (
+                "create malware",
+                "build malware",
+                "deploy malware",
+                "crear malware",
+                "desarrollar malware",
+                "instalar ransomware",
+                "keylogger",
+                "botnet",
+                "payload malicioso",
+            ),
+            SafetyCategory.ILLEGALITY.value: (
+                "how can i steal",
+                "cómo puedo robar",
+                "como puedo robar",
+                "ayúdame a robar",
+                "help me steal",
+                "falsificar documentos",
+                "saltarse controles",
+            ),
+        }
+        category, evidence = self._first_matching_evidence(
+            text,
+            harmful_patterns,
+            source="contextual_harmful_intent",
+            intent=SafetyIntent.HARMFUL.value,
+        )
+        if category:
+            return SafetyDecision(
+                allowed=False,
+                category=category,
+                intent=SafetyIntent.HARMFUL.value,
+                confidence=0.95,
+                evidence=evidence,
+                safe_alternative=(
+                    "Puedo ayudar con prevención, educación, ficción no operativa "
+                    "o análisis defensivo sin instrucciones de abuso."
+                ),
+            )
+
+        contextual_intents = {
+            SafetyIntent.PREVENTION.value: (
+                "prevenir",
+                "prevención",
+                "prevencion",
+                "prevent",
+                "avoid",
+                "evitar",
+                "mitigar",
+                "mitigate",
+                "proteger",
+                "protect",
+                "detectar phishing",
+                "prevenir phishing",
+            ),
+            SafetyIntent.DEFENSIVE_ANALYSIS.value: (
+                "defensive analysis",
+                "análisis defensivo",
+                "analisis defensivo",
+                "threat model",
+                "modelo de amenazas",
+                "hardening",
+                "blue team",
+                "auditoría defensiva",
+                "auditoria defensiva",
+            ),
+            SafetyIntent.FICTION.value: (
+                "novela",
+                "fiction",
+                "ficción",
+                "ficcion",
+                "story",
+                "cuento",
+                "screenplay",
+                "guion",
+            ),
+            SafetyIntent.EDUCATION.value: (
+                "educativo",
+                "educational",
+                "aprender",
+                "learn",
+                "explica",
+                "explain",
+                "conceptual",
+                "overview",
+            ),
+            SafetyIntent.BENIGN.value: (
+                "contraseña segura",
+                "secure password",
+                "password segura",
+                "crear una contraseña segura",
+                "create a secure password",
+            ),
+        }
+        for intent, keywords in contextual_intents.items():
+            for keyword in keywords:
+                if keyword in text:
+                    evidence_item = SafetyEvidence(
+                        field="combined_request",
+                        keyword=keyword,
+                        evidence=text[:160],
+                        source="contextual_benign_intent",
+                        category=SafetyCategory.ALLOWED.value,
+                        intent=intent,
+                    )
+                    return SafetyDecision(
+                        allowed=True,
+                        category=SafetyCategory.ALLOWED.value,
+                        intent=intent,
+                        confidence=(
+                            0.86 if intent != SafetyIntent.BENIGN.value else 0.9
+                        ),
+                        evidence=[evidence_item.__dict__],
+                        safe_alternative="No se requiere alternativa segura.",
+                    )
+
+        return SafetyDecision(
+            allowed=True,
+            category=SafetyCategory.ALLOWED.value,
+            intent=SafetyIntent.UNKNOWN.value,
+            confidence=0.55,
+            evidence=[],
+            safe_alternative="No se requiere alternativa segura.",
+        )
+
+    @staticmethod
+    def _violation_from_safety_decision(decision: SafetyDecision) -> Dict[str, Any]:
+        evidence = list(decision.evidence)
+        if decision.category == SafetyCategory.ILLEGALITY.value:
+            evidence.extend(
+                {**item, "source": "local_semantic_pattern"}
+                for item in decision.evidence
+            )
+        return {
+            "name": decision.category,
+            "category": decision.category,
+            "description": "Intención dañina inferida por evaluación contextual bilingüe.",
+            "severity": "block",
+            "matched_keywords": [
+                item.get("keyword", decision.category) for item in evidence
+            ],
+            "evidence": evidence,
+            "recommended_action": "block",
+            "intent": decision.intent,
+            "confidence": decision.confidence,
+        }
+
     def _build_moral_decision(
-        self, violated_constraints: List[Dict[str, Any]]
+        self,
+        violated_constraints: List[Dict[str, Any]],
+        safety_decision: SafetyDecision,
     ) -> MoralDecision:
         blocking = [
             item for item in violated_constraints if item.get("severity") == "block"
@@ -589,6 +805,9 @@ class QualiaNode:
                     "La solicitud activa restricciones morales/legales de "
                     "severidad bloqueante."
                 ),
+                category=safety_decision.category,
+                intent=safety_decision.intent,
+                confidence=safety_decision.confidence,
             )
         if violated_constraints:
             return MoralDecision(
@@ -598,22 +817,43 @@ class QualiaNode:
                 evidence=evidence,
                 safe_alternative="Responder con cautela y sin instrucciones operativas dañinas.",
                 audit_reason="La solicitud contiene señales de riesgo no bloqueantes.",
+                category=safety_decision.category,
+                intent=safety_decision.intent,
+                confidence=safety_decision.confidence,
             )
         return MoralDecision(
             allowed=True,
             severity="allow",
             categories=[],
             evidence=[],
-            safe_alternative="No se requiere alternativa segura.",
+            safe_alternative=safety_decision.safe_alternative,
             audit_reason="No se detectaron restricciones morales o legales.",
+            category=safety_decision.category,
+            intent=safety_decision.intent,
+            confidence=safety_decision.confidence,
         )
 
     def _evaluate_moral_constraints(
-        self, request: Mapping[str, Any]
+        self, request: Mapping[str, Any], safety_decision: SafetyDecision | None = None
     ) -> List[Dict[str, Any]]:
         fields = ("task", "context", "goals", "prompt", "instruction", "token")
         field_values = {key: str(request.get(key, "")).lower() for key in fields}
+        if (
+            safety_decision is not None
+            and safety_decision.allowed
+            and safety_decision.intent
+            in {
+                SafetyIntent.PREVENTION.value,
+                SafetyIntent.EDUCATION.value,
+                SafetyIntent.FICTION.value,
+                SafetyIntent.DEFENSIVE_ANALYSIS.value,
+                SafetyIntent.BENIGN.value,
+            }
+        ):
+            return []
         violations: List[Dict[str, Any]] = self._evaluate_agix_moral_policy(request)
+        if safety_decision is not None and not safety_decision.allowed:
+            violations.append(self._violation_from_safety_decision(safety_decision))
         for constraint in self.moral_constraints:
             if constraint.name in {item.get("category") for item in violations}:
                 continue
@@ -645,7 +885,13 @@ class QualiaNode:
                     }
                 )
 
-        violations.extend(self._evaluate_agix_moral_semantics(request, violations))
+        if safety_decision is None or safety_decision.intent not in {
+            SafetyIntent.PREVENTION.value,
+            SafetyIntent.EDUCATION.value,
+            SafetyIntent.FICTION.value,
+            SafetyIntent.DEFENSIVE_ANALYSIS.value,
+        }:
+            violations.extend(self._evaluate_agix_moral_semantics(request, violations))
         return violations
 
     def _evaluate_agix_moral_policy(
