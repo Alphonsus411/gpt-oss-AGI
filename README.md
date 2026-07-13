@@ -73,6 +73,10 @@ Este proyecto se distribuye bajo la Licencia Apache 2.0. Puedes encontrar el tex
 
 [harmony]: https://github.com/openai/harmony
 
+## Sincronización con upstream
+
+Consulta [`docs/upstream_sync.md`](docs/upstream_sync.md) para ver el remoto upstream configurado, el commit base usado para comparación y las extensiones del fork que deben preservarse durante futuras sincronizaciones.
+
 ## Integración AGIX/Qualia
 
 El Core fija `agix==1.9.0` y usa `agicore_core.QualiaNode` como capa rectora de planificación, enrutado y ciclo de tokens. Qualia aplica políticas ontoéticas, restricciones morales/legales, patrones cognitivos y señales evolutivas antes de que una solicitud llegue al GPT o al `MetaRouter`.
