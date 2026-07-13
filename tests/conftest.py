@@ -14,6 +14,35 @@ from openai_harmony import (
 from gpt_oss.responses_api.api_server import create_api_server
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "unit: unit tests that run locally with official openai-harmony encoding",
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: integration tests that may compose multiple components",
+    )
+    config.addinivalue_line(
+        "markers",
+        (
+            "external_resource: tests that require resources outside the Python "
+            "process, such as Docker or network services"
+        ),
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        if item.get_closest_marker("external_resource") is not None:
+            item.add_marker(pytest.mark.integration)
+        elif (
+            item.get_closest_marker("integration") is None
+            and item.get_closest_marker("unit") is None
+        ):
+            item.add_marker(pytest.mark.unit)
+
+
 @pytest.fixture(scope="session")
 def harmony_encoding():
     return load_harmony_encoding(HarmonyEncodingName.HARMONY_GPT_OSS)

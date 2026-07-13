@@ -1,11 +1,14 @@
 name: CI
 
 on:
-  release:
-    types: [published]
+  pull_request:
   push:
+    branches:
+      - "**"
     tags:
       - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 # Minimal repo-level permissions; job-level permissions override where needed.
@@ -14,8 +17,31 @@ permissions:
   id-token: write
 
 jobs:
+
+  test:
+    name: Unit and Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Run tests without Harmony stubs
+        run: |
+          pytest tests/test_responses_api.py -m "unit or integration"
   publish:
     name: Build & Publish to PyPI (Trusted Publishing)
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     # Run in the GitHub environment named "release" so you can gate it with approvals.

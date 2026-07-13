@@ -27,7 +27,7 @@ version = "0.0.1"
 triton = ["triton", "safetensors>=0.5.3", "torch>=2.7.0"]
 torch = ["safetensors>=0.5.3", "torch>=2.7.0"]
 metal = ["numpy", "tqdm", "safetensors", "torch"]
-test = ["pytest>=8.4.1", "httpx>=0.28.1"]
+test = ["pytest>=8.4.1", "httpx>=0.28.1", "openai-harmony"]
 eval = ["pandas", "numpy", "openai", "jinja2", "tqdm", "blobfile"]
 agix-neuro = ["agix[neuro]==1.9.0"]
 agix-ml = ["agix[ml]==1.9.0"]
