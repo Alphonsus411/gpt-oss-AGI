@@ -168,3 +168,120 @@ def test_consolidate_from_safe_episodes_creates_inferred_hypothesis():
     assert inferred
     assert inferred[0].confidence == 1.0
     assert inferred[0].pattern["recommended_action"] == "expert_a"
+
+from datetime import timedelta
+
+from gpt_oss.strategic_memory import InMemoryMemoryBackend, MemoryBackend, SQLiteMemoryBackend
+
+
+def test_ram_backend_with_collection_limits():
+    backend = InMemoryMemoryBackend(collection_limits={MemoryBackend.LEARNING: 1, MemoryBackend.AUDIT: 2})
+    memoria = StrategicMemory(backend=backend)
+    ep1 = Episode(datetime.utcnow(), "i1", "a1", "o1")
+    ep2 = Episode(datetime.utcnow(), "i2", "a2", "o2")
+
+    memoria.add_episode(ep1)
+    memoria.add_episode(ep2)
+    memoria.add_audit_episode(ep1)
+    memoria.add_audit_episode(ep2)
+
+    assert memoria.query({}) == [ep2]
+    assert memoria.query_audit({}) == [ep1, ep2]
+
+
+def test_sqlite_backend_persists_with_temp_file(tmp_path):
+    db_path = tmp_path / "memory.sqlite"
+    memoria = StrategicMemory(backend=SQLiteMemoryBackend(db_path))
+    ep = Episode(datetime.utcnow(), "hola", "saludo", "ok", {"tema": "sqlite"})
+
+    memoria.save("plan", {"step": 1})
+    memoria.add_episode(ep)
+    memoria.persist()
+
+    reloaded = StrategicMemory(backend=SQLiteMemoryBackend(db_path))
+    assert reloaded.get("plan") == {"step": 1}
+    assert reloaded.query({"tema": "sqlite"})[0].action == "saludo"
+
+
+def test_ttl_expiration_removes_old_episodes_and_keys():
+    old = datetime.utcnow() - timedelta(seconds=60)
+    memoria = StrategicMemory(backend=InMemoryMemoryBackend(ttl=timedelta(seconds=1)))
+    memoria.save("token_info", "visible")
+    memoria.add_episode(Episode(old, "old", "expired", "no"))
+
+    assert memoria.query({"action": "expired"}) == []
+
+
+def test_transaction_rollback_discards_changes():
+    memoria = StrategicMemory(backend=InMemoryMemoryBackend())
+
+    with pytest.raises(RuntimeError):
+        with memoria.transaction():
+            memoria.save("plan", "temporal")
+            memoria.add_episode(Episode(datetime.utcnow(), "i", "a", "o"))
+            raise RuntimeError("rollback")
+
+    assert memoria.get("plan") is None
+    assert memoria.query({}) == []
+
+
+def test_sqlite_transaction_rollback_discards_changes(tmp_path):
+    memoria = StrategicMemory(backend=SQLiteMemoryBackend(tmp_path / "tx.sqlite"))
+
+    with pytest.raises(RuntimeError):
+        with memoria.transaction():
+            memoria.save("plan", "temporal")
+            memoria.add_episode(Episode(datetime.utcnow(), "i", "a", "o"))
+            raise RuntimeError("rollback")
+
+    assert memoria.get("plan") is None
+    assert memoria.query({}) == []
+
+
+def test_secret_redaction_in_prompts_tokens_credentials_and_api_keys():
+    memoria = StrategicMemory()
+    memoria.save(
+        "secrets",
+        {
+            "prompt": "usa token=tok_123456789012345 y api_key: abcdefghijklmnop",
+            "credentials": {"password": "super-secret", "nested": "Bearer abcdefghijklmnop"},
+            "openai_api_key": "sk-abcdefghijklmnop123456",
+        },
+    )
+    memoria.add_episode(
+        Episode(
+            datetime.utcnow(),
+            "prompt con sk-abcdefghijklmnop123456",
+            "call",
+            {"credential": "abcdef"},
+            {"api_key": "secret", "token_hint": "Bearer abcdefghijklmnop"},
+        )
+    )
+
+    stored = memoria.get("secrets")
+    episode = memoria.query({"action": "call"})[0]
+
+    assert "tok_123456789012345" not in str(stored)
+    assert "abcdefghijklmnop" not in str(stored)
+    assert stored["credentials"]["password"] == "[REDACTED]"
+    assert stored["openai_api_key"] == "[REDACTED]"
+    assert "sk-abcdefghijklmnop123456" not in episode.input
+    assert episode.outcome["credential"] == "[REDACTED]"
+    assert episode.metadata["api_key"] == "[REDACTED]"
+
+
+def test_learning_audit_and_rejected_collections_remain_separated():
+    memoria = StrategicMemory()
+    learned = Episode(datetime.utcnow(), "learn", "learn_action", "ok", {"kind": "learned"})
+    audit = Episode(datetime.utcnow(), "audit", "audit_action", "ok", {"kind": "audit"})
+    rejected = Episode(datetime.utcnow(), "reject", "reject_action", {"blocked": True}, {"kind": "rejected"})
+
+    memoria.add_episode(learned)
+    memoria.add_audit_episode(audit)
+    memoria.add_episode(rejected)
+
+    assert memoria.query({"kind": "learned"}) == [learned]
+    assert memoria.query({"kind": "audit"}) == []
+    assert memoria.query({"kind": "rejected"}) == []
+    assert [ep.metadata["kind"] for ep in memoria.query_audit({})] == ["audit", "rejected"]
+    assert memoria.query_rejected({})[0].metadata["kind"] == "rejected"
