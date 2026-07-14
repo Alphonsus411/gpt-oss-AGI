@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import math
 import os
 import sys
 
@@ -430,7 +431,7 @@ class QualiaNode:
     ) -> Dict[str, Any]:
         """Añade Qualia a una petición antes de enviarla al GPT/router."""
 
-        enriched = dict(request)
+        enriched = self._validated_payload(request)
         if not self.enabled:
             return enriched
 
@@ -1195,6 +1196,66 @@ class QualiaNode:
                 }
         return {"memory_persisted": False, "memory_error": "no_supported_method"}
 
+    @classmethod
+    def _is_invalid_payload_value(cls, value: Any) -> bool:
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, float):
+            return not math.isfinite(value)
+        if isinstance(value, (str, bytes, bytearray)):
+            return False
+        if isinstance(value, int) or value is None:
+            return False
+        if isinstance(value, Mapping):
+            return any(
+                cls._is_invalid_payload_value(item)
+                for pair in value.items()
+                for item in pair
+            )
+        if isinstance(value, (list, tuple, set)):
+            return any(cls._is_invalid_payload_value(item) for item in value)
+        return True
+
+    @classmethod
+    def _validated_payload(cls, payload: Mapping[str, Any]) -> Dict[str, Any]:
+        """Descarta valores no serializables/numéricos no finitos sin interrumpir."""
+
+        validated: Dict[str, Any] = {}
+        invalid_fields: List[Dict[str, str]] = []
+        protected_policy_keys = {"pro_vida", "no_dano", "respeto"}
+        for key, value in payload.items():
+            invalid_policy_override = (
+                key in protected_policy_keys
+                and (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or (isinstance(value, float) and not math.isfinite(value))
+                )
+            )
+            if invalid_policy_override or cls._is_invalid_payload_value(value):
+                invalid_fields.append({"field": str(key), "type": type(value).__name__})
+                continue
+            validated[key] = value
+        if invalid_fields:
+            validated["_qualia_input_validation"] = {
+                "valid": False,
+                "rejected_fields": invalid_fields,
+            }
+        return validated
+
+    def _policy_value(self, name: str, default: float) -> float:
+        for policy in self.policies:
+            if policy.name == name:
+                return float(policy.weight)
+        return default
+
+    def _internal_ethical_action(self) -> Dict[str, float]:
+        return {
+            "pro_vida": self._policy_value("pro_vida", 0.9),
+            "no_dano": self._policy_value("no_dano", 1.0),
+            "respeto": self._policy_value("respeto", 0.8),
+        }
+
     def _build_qualia_vectors(
         self, request: Mapping[str, Any]
     ) -> tuple[List[float], List[float]]:
@@ -1209,18 +1270,15 @@ class QualiaNode:
             min(len(text) / 1000.0, 1.0),
             min(goals_count / 10.0, 1.0),
         ]
+        internal_action = self._internal_ethical_action()
         internal_state = [
-            float(request.get("no_dano", 0.85)),
+            internal_action["no_dano"],
             max(0.0, 1.0 - min(len(violations) / 5.0, 1.0)),
         ]
         return sensory_input, internal_state
 
     def _ethical_score(self, request: Mapping[str, Any]) -> float:
-        action = {
-            "pro_vida": float(request.get("pro_vida", 0.75)),
-            "no_dano": float(request.get("no_dano", 0.85)),
-            "respeto": float(request.get("respeto", 0.8)),
-        }
+        action = self._internal_ethical_action()
         if self._ecoethics is not None:
             return float(self._ecoethics.evaluar(action))
         weights = {"pro_vida": 0.5, "no_dano": 0.3, "respeto": 0.2}
