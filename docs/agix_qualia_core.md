@@ -1,6 +1,6 @@
 # Arquitectura AGIX/Qualia en GPT-OSS
 
-Este proyecto fija la integración con `agix==1.9.0` y expone extras opcionales para capacidades `ml`, `data` y `neuro`. El objetivo del núcleo es que toda decisión relevante del GPT pase por un ciclo Qualia común antes y después de ejecutarse.
+Este proyecto fija la integración estricta con `agix==1.9.0` mediante extras opcionales explícitos y expone capacidades `ml`, `data` y `neuro`. El objetivo del núcleo es que toda decisión relevante del GPT pase por un ciclo Qualia común antes y después de ejecutarse.
 
 ## Flujo central
 

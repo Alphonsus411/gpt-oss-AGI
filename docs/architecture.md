@@ -33,9 +33,10 @@ Durante rebases, merges o comparaciones con upstream deben preservarse estos mó
 
 ## Perfiles AGIX
 
-El paquete fija `agix==1.9.0` y define extras opcionales:
+La instalación base del paquete no instala AGIX. El runtime `agix==1.9.0` queda fijado en extras explícitos:
 
 ```bash
+pip install -e .[agix]
 pip install -e .[agix-neuro]
 pip install -e .[agix-ml]
 pip install -e .[agix-data]
@@ -48,9 +49,9 @@ ello, una carga limpia del paquete arranca sin AGIX y conserva políticas
 locales, auditoría y restricciones morales/legales mientras deja desactivados
 los adaptadores avanzados. El mismo archivo permite alternar entre:
 
-- `local_safe`: AGIX no disponible; se aplican políticas locales.
-- `degraded`: versión AGIX no compatible; se desactivan capacidades avanzadas.
-- `strict_compatible`: AGIX requerido y compatible activo.
+- `local_safe`: no requiere AGIX; se aplican políticas locales.
+- `degraded`: AGIX ausente, parcial o no compatible; se desactivan capacidades avanzadas.
+- `strict_compatible`: exige AGIX 1.9.0 y contratos mínimos compatibles activos.
 
 Variables relevantes:
 

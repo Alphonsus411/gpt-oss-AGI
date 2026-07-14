@@ -81,11 +81,12 @@ Consulta [`docs/upstream_sync.md`](docs/upstream_sync.md) para ver el remoto ups
 
 ## Integración AGIX/Qualia
 
-El Core fija `agix==1.9.0` y usa `agicore_core.QualiaNode` como capa rectora de planificación, enrutado y ciclo de tokens. Qualia aplica políticas ontoéticas, restricciones morales/legales, patrones cognitivos y señales evolutivas antes de que una solicitud llegue al GPT o al `MetaRouter`.
+El Core mantiene `agix==1.9.0` como extra opcional explícito y usa `agicore_core.QualiaNode` como capa rectora de planificación, enrutado y ciclo de tokens. Qualia aplica políticas ontoéticas, restricciones morales/legales, patrones cognitivos y señales evolutivas antes de que una solicitud llegue al GPT o al `MetaRouter`.
 
 Perfiles opcionales para capacidades avanzadas de AGIX:
 
 ```bash
+pip install -e .[agix]         # runtime AGIX estricto 1.9.0
 pip install -e .[agix-neuro]   # módulos neuroinspirados de AGIX
 pip install -e .[agix-ml]      # módulos ML de AGIX
 pip install -e .[agix-data]    # integración de datos
@@ -98,7 +99,7 @@ La API de Responses y los backends de inferencia pueden gobernarse con `CoreQual
 
 ## CI y publicación
 
-La integración continua está documentada en [`docs/ci.md`](docs/ci.md). El workflow principal de CI valida pruebas sin AGIX, pruebas con `agix==1.9.0`, Harmony/Responses API reales, lint con Ruff, type checking con Pyright, build de wheel/sdist, instalación limpia de artefactos y auditoría con `pip-audit`.
+La integración continua está documentada en [`docs/ci.md`](docs/ci.md). El workflow principal de CI valida el job `local_safe` sin AGIX, el job `strict_compatible` con `agix==1.9.0`, Harmony/Responses API reales, lint con Ruff, type checking con Pyright, build de wheel/sdist, instalación limpia de artefactos y auditoría con `pip-audit`.
 
 La publicación a PyPI está separada en un workflow dedicado de release/manual con entorno protegido `release`; no se publica nunca desde un `push` normal a `main`.
 
@@ -115,7 +116,7 @@ Documentación ampliada:
 
 - **Commit upstream usado como base común:** `4931694686fadfa74a80554473d32f7dd4d059f3`; último `upstream/main` observado en la sincronización documental: `d21f34ec3c1ede813adfbd83f07d2ad2eec7ff02`.
 - **Módulos del fork a preservar:** `agicore_core/`, `gpt_oss/planner.py`, `meta_router.py`, `gpt_oss/strategic_memory.py`, `agicore_core/reasoning_kernel.py` y `gpt_oss/responses_api/inference/qualia_guard.py`.
-- **Perfiles AGIX:** instalación base con `agix==1.9.0`; extras `agix-neuro`, `agix-ml`, `agix-data` y `agix-full`; perfiles runtime `local_safe`, `degraded` y `strict_compatible`.
+- **Perfiles AGIX:** instalación base sin AGIX; extras explícitos `agix`, `agix-neuro`, `agix-ml`, `agix-data` y `agix-full`; perfiles runtime `local_safe`, `degraded` y `strict_compatible`.
 - **SafetyGate contextual:** `CoreQualiaEngine`/`SafetyGate` evalúa solicitudes antes de GPT, router o backend, y devuelve bloqueos auditables con alternativa segura.
 - **Validación y secretos:** la memoria estratégica redacta claves y patrones sensibles antes de almacenar en RAM o SQLite.
 - **Filtrado de salida:** `OutputSafetyScanner` inspecciona prompt, tool calls, chunks de streaming y respuesta final mediante ventanas solapadas y Qualia.

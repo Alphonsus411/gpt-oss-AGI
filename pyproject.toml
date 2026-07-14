@@ -17,7 +17,6 @@ dependencies = [
   "uvicorn>=0.34,<0.35",
   "requests>=2.31.0",
   "termcolor",
-  "agix==1.9.0",
 ]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -39,6 +38,7 @@ Issues = "https://github.com/inteligencIA-AGI/gpt-oss-AGI/issues"
 "OpenAI gpt-oss upstream" = "https://github.com/openai/gpt-oss"
 
 [project.optional-dependencies]
+agix = ["agix==1.9.0"]
 triton = ["triton", "safetensors>=0.5.3", "torch>=2.7.0"]
 torch = ["safetensors>=0.5.3", "torch>=2.7.0"]
 metal = ["numpy", "tqdm", "safetensors", "torch"]
