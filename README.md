@@ -101,3 +101,25 @@ La API de Responses y los backends de inferencia pueden gobernarse con `CoreQual
 La integración continua está documentada en [`docs/ci.md`](docs/ci.md). El workflow principal de CI valida pruebas sin AGIX, pruebas con `agix==1.9.0`, Harmony/Responses API reales, lint con Ruff, type checking con Pyright, build de wheel/sdist, instalación limpia de artefactos y auditoría con `pip-audit`.
 
 La publicación a PyPI está separada en un workflow dedicado de release/manual con entorno protegido `release`; no se publica nunca desde un `push` normal a `main`.
+
+## Arquitectura, seguridad y memoria del fork
+
+Documentación ampliada:
+
+- [`docs/architecture.md`](docs/architecture.md): base upstream, módulos preservados, capas Qualia/AGIX, perfiles AGIX, flujo de decisión y estado PyPI.
+- [`docs/security.md`](docs/security.md): SafetyGate contextual, validación de entradas, redacción de secretos, filtrado de salida y recomendaciones operativas.
+- [`docs/strategic_memory.md`](docs/strategic_memory.md): backends RAM/SQLite, colecciones de auditoría/rechazo y consolidación inferencial segura.
+- [`docs/benchmarks.md`](docs/benchmarks.md): resultados registrados de Responses + Qualia y cómo reproducirlos.
+
+### Resumen operativo del fork
+
+- **Commit upstream usado como base común:** `4931694686fadfa74a80554473d32f7dd4d059f3`; último `upstream/main` observado en la sincronización documental: `d21f34ec3c1ede813adfbd83f07d2ad2eec7ff02`.
+- **Módulos del fork a preservar:** `agicore_core/`, `gpt_oss/planner.py`, `meta_router.py`, `gpt_oss/strategic_memory.py`, `agicore_core/reasoning_kernel.py` y `gpt_oss/responses_api/inference/qualia_guard.py`.
+- **Perfiles AGIX:** instalación base con `agix==1.9.0`; extras `agix-neuro`, `agix-ml`, `agix-data` y `agix-full`; perfiles runtime `local_safe`, `degraded` y `strict_compatible`.
+- **SafetyGate contextual:** `CoreQualiaEngine`/`SafetyGate` evalúa solicitudes antes de GPT, router o backend, y devuelve bloqueos auditables con alternativa segura.
+- **Validación y secretos:** la memoria estratégica redacta claves y patrones sensibles antes de almacenar en RAM o SQLite.
+- **Filtrado de salida:** `OutputSafetyScanner` inspecciona prompt, tool calls, chunks de streaming y respuesta final mediante ventanas solapadas y Qualia.
+- **Memoria:** `StrategicMemory` usa RAM por defecto y puede persistir en SQLite; separa aprendizaje, auditoría y señales rechazadas.
+- **Benchmarks:** la última ejecución registrada midió `none`, `local_safe` y `strict_compatible`; el modo estricto quedó no disponible si faltan componentes AGIX completos.
+- **PyPI:** el paquete se declara como `gpt-oss-agi` versión `0.0.1`; la publicación está separada en workflow protegido y no ocurre desde pushes normales a `main`.
+- **Advertencia:** este fork es experimental, comunitario y no oficial; no representa a OpenAI, no redistribuye pesos y no garantiza AGI.
