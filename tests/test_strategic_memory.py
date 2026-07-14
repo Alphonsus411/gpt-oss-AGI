@@ -1,6 +1,6 @@
 import pytest
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from gpt_oss.strategic_memory import Episode, StrategicMemory
 
@@ -34,7 +34,7 @@ def test_update_missing_key_raises():
 def test_add_and_query_episode():
     memoria = StrategicMemory()
     ep = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="hola",
         action="saludo",
         outcome="ok",
@@ -49,7 +49,7 @@ def test_summarize_episodes():
     memoria = StrategicMemory()
     memoria.add_episode(
         Episode(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             input="uno",
             action="a",
             outcome="exito",
@@ -57,7 +57,7 @@ def test_summarize_episodes():
     )
     memoria.add_episode(
         Episode(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             input="dos",
             action="a",
             outcome="fracaso",
@@ -71,14 +71,14 @@ def test_summarize_episodes():
 def test_add_episode_query_and_summarize_multiple():
     memoria = StrategicMemory()
     ep1 = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="i1",
         action="alpha",
         outcome="ok",
         metadata={"tag": 1},
     )
     ep2 = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="i2",
         action="beta",
         outcome="fail",
@@ -99,19 +99,19 @@ def test_add_episode_query_and_summarize_multiple():
 def test_max_episodes_fifo():
     memoria = StrategicMemory(max_episodes=2)
     ep1 = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="i1",
         action="a1",
         outcome="o1",
     )
     ep2 = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="i2",
         action="a2",
         outcome="o2",
     )
     ep3 = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="i3",
         action="a3",
         outcome="o3",
@@ -129,7 +129,7 @@ def test_max_episodes_fifo():
 def test_blocked_episode_goes_to_audit_and_rejected_memory():
     memoria = StrategicMemory()
     ep = Episode(
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         input="bad",
         action="blocked_by_qualia",
         outcome={"blocked": True},
@@ -148,7 +148,7 @@ def test_consolidate_from_safe_episodes_creates_inferred_hypothesis():
     for idx in range(2):
         memoria.add_episode(
             Episode(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 input=f"i{idx}",
                 action="expert_a",
                 outcome="ok",
@@ -177,8 +177,8 @@ from gpt_oss.strategic_memory import InMemoryMemoryBackend, MemoryBackend, SQLit
 def test_ram_backend_with_collection_limits():
     backend = InMemoryMemoryBackend(collection_limits={MemoryBackend.LEARNING: 1, MemoryBackend.AUDIT: 2})
     memoria = StrategicMemory(backend=backend)
-    ep1 = Episode(datetime.utcnow(), "i1", "a1", "o1")
-    ep2 = Episode(datetime.utcnow(), "i2", "a2", "o2")
+    ep1 = Episode(datetime.now(timezone.utc), "i1", "a1", "o1")
+    ep2 = Episode(datetime.now(timezone.utc), "i2", "a2", "o2")
 
     memoria.add_episode(ep1)
     memoria.add_episode(ep2)
@@ -192,7 +192,7 @@ def test_ram_backend_with_collection_limits():
 def test_sqlite_backend_persists_with_temp_file(tmp_path):
     db_path = tmp_path / "memory.sqlite"
     memoria = StrategicMemory(backend=SQLiteMemoryBackend(db_path))
-    ep = Episode(datetime.utcnow(), "hola", "saludo", "ok", {"tema": "sqlite"})
+    ep = Episode(datetime.now(timezone.utc), "hola", "saludo", "ok", {"tema": "sqlite"})
 
     memoria.save("plan", {"step": 1})
     memoria.add_episode(ep)
@@ -204,7 +204,7 @@ def test_sqlite_backend_persists_with_temp_file(tmp_path):
 
 
 def test_ttl_expiration_removes_old_episodes_and_keys():
-    old = datetime.utcnow() - timedelta(seconds=60)
+    old = datetime.now(timezone.utc) - timedelta(seconds=60)
     memoria = StrategicMemory(backend=InMemoryMemoryBackend(ttl=timedelta(seconds=1)))
     memoria.save("token_info", "visible")
     memoria.add_episode(Episode(old, "old", "expired", "no"))
@@ -218,7 +218,7 @@ def test_transaction_rollback_discards_changes():
     with pytest.raises(RuntimeError):
         with memoria.transaction():
             memoria.save("plan", "temporal")
-            memoria.add_episode(Episode(datetime.utcnow(), "i", "a", "o"))
+            memoria.add_episode(Episode(datetime.now(timezone.utc), "i", "a", "o"))
             raise RuntimeError("rollback")
 
     assert memoria.get("plan") is None
@@ -231,7 +231,7 @@ def test_sqlite_transaction_rollback_discards_changes(tmp_path):
     with pytest.raises(RuntimeError):
         with memoria.transaction():
             memoria.save("plan", "temporal")
-            memoria.add_episode(Episode(datetime.utcnow(), "i", "a", "o"))
+            memoria.add_episode(Episode(datetime.now(timezone.utc), "i", "a", "o"))
             raise RuntimeError("rollback")
 
     assert memoria.get("plan") is None
@@ -250,7 +250,7 @@ def test_secret_redaction_in_prompts_tokens_credentials_and_api_keys():
     )
     memoria.add_episode(
         Episode(
-            datetime.utcnow(),
+            datetime.now(timezone.utc),
             "prompt con sk-abcdefghijklmnop123456",
             "call",
             {"credential": "abcdef"},
@@ -272,9 +272,9 @@ def test_secret_redaction_in_prompts_tokens_credentials_and_api_keys():
 
 def test_learning_audit_and_rejected_collections_remain_separated():
     memoria = StrategicMemory()
-    learned = Episode(datetime.utcnow(), "learn", "learn_action", "ok", {"kind": "learned"})
-    audit = Episode(datetime.utcnow(), "audit", "audit_action", "ok", {"kind": "audit"})
-    rejected = Episode(datetime.utcnow(), "reject", "reject_action", {"blocked": True}, {"kind": "rejected"})
+    learned = Episode(datetime.now(timezone.utc), "learn", "learn_action", "ok", {"kind": "learned"})
+    audit = Episode(datetime.now(timezone.utc), "audit", "audit_action", "ok", {"kind": "audit"})
+    rejected = Episode(datetime.now(timezone.utc), "reject", "reject_action", {"blocked": True}, {"kind": "rejected"})
 
     memoria.add_episode(learned)
     memoria.add_audit_episode(audit)

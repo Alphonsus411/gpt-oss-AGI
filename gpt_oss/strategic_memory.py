@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
@@ -34,7 +34,7 @@ class InferenceHypothesis:
     evidence: List[Episode]
     confidence: float
     ethical_constraints: List[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -132,7 +132,7 @@ class InMemoryMemoryBackend(MemoryBackend):
         self._purge_expired()
         if key in self._storage:
             raise ValueError(f"La clave '{key}' ya existe en la memoria.")
-        self._storage[key] = (datetime.utcnow(), SecretRedactor.redact(value))
+        self._storage[key] = (datetime.now(timezone.utc), SecretRedactor.redact(value))
 
     def get(self, key: str, default: Any | None = None) -> Any:
         self._purge_expired()
@@ -142,7 +142,7 @@ class InMemoryMemoryBackend(MemoryBackend):
         self._purge_expired()
         if key not in self._storage:
             raise KeyError(f"La clave '{key}' no se encuentra en la memoria.")
-        self._storage[key] = (datetime.utcnow(), SecretRedactor.redact(value))
+        self._storage[key] = (datetime.now(timezone.utc), SecretRedactor.redact(value))
 
     def append_episode(self, collection: str, episode: Episode) -> None:
         self._purge_expired()
@@ -173,7 +173,7 @@ class InMemoryMemoryBackend(MemoryBackend):
     def _purge_expired(self) -> None:
         if self._ttl is None:
             return
-        cutoff = datetime.utcnow() - self._ttl
+        cutoff = datetime.now(timezone.utc) - self._ttl
         self._storage = {key: item for key, item in self._storage.items() if item[0] >= cutoff}
         for name, episodes in self._collections.items():
             self._collections[name] = [episode for episode in episodes if episode.timestamp >= cutoff]
@@ -209,7 +209,7 @@ class SQLiteMemoryBackend(InMemoryMemoryBackend):
         try:
             self._conn.execute(
                 "INSERT INTO kv(key, created_at, value) VALUES (?, ?, ?)",
-                (key, datetime.utcnow().isoformat(), sqlite3.Binary(pickle.dumps(SecretRedactor.redact(value)))),
+                (key, datetime.now(timezone.utc).isoformat(), sqlite3.Binary(pickle.dumps(SecretRedactor.redact(value)))),
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"La clave '{key}' ya existe en la memoria.") from exc
@@ -224,7 +224,7 @@ class SQLiteMemoryBackend(InMemoryMemoryBackend):
         self._purge_expired()
         cur = self._conn.execute(
             "UPDATE kv SET created_at = ?, value = ? WHERE key = ?",
-            (datetime.utcnow().isoformat(), sqlite3.Binary(pickle.dumps(SecretRedactor.redact(value))), key),
+            (datetime.now(timezone.utc).isoformat(), sqlite3.Binary(pickle.dumps(SecretRedactor.redact(value))), key),
         )
         if cur.rowcount == 0:
             raise KeyError(f"La clave '{key}' no se encuentra en la memoria.")
@@ -274,7 +274,7 @@ class SQLiteMemoryBackend(InMemoryMemoryBackend):
     def _purge_expired(self) -> None:
         if self._ttl is None:
             return
-        cutoff = (datetime.utcnow() - self._ttl).isoformat()
+        cutoff = (datetime.now(timezone.utc) - self._ttl).isoformat()
         self._conn.execute("DELETE FROM kv WHERE created_at < ?", (cutoff,))
         self._conn.execute("DELETE FROM episodes WHERE timestamp < ?", (cutoff,))
         self.persist()

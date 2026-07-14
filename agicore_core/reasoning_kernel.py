@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterator, List
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import ast
 import operator as op
 import logging
@@ -266,7 +266,7 @@ class ReasoningKernel:
             )
             self._record_memory_episode(
                 Episode(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     input=step,
                     action="blocked_by_qualia",
                     outcome=result,
@@ -299,7 +299,7 @@ class ReasoningKernel:
 
         if self.memory is not None:
             episodio = Episode(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 input=step,
                 action="step",
                 outcome=result,
@@ -373,7 +373,7 @@ class ReasoningKernel:
                 self.qualia_engine.after_decision(blocked, self._state, phase="token")
                 self._record_memory_episode(
                     Episode(
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                         input=token,
                         action="blocked_by_qualia",
                         outcome=blocked,
@@ -387,7 +387,7 @@ class ReasoningKernel:
                 break
             if self.memory is not None:
                 episodio = Episode(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     input=token,
                     action="token",
                     outcome=siguiente,
