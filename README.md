@@ -92,7 +92,7 @@ pip install -e .[agix-data]    # integración de datos
 pip install -e .[agix-full]    # perfil completo ml+data+neuro
 ```
 
-`agicore_core/config/qualia_profile.json` permite alternar entre modo seguro local, modo degradado y modo estricto (`require_agix_runtime`) cuando se requiere bloquear el arranque si AGIX 1.9.0 no está disponible. También se puede apuntar a un perfil alternativo con `AGICORE_QUALIA_PROFILE`, exigir runtime real con `AGIX_REQUIRE_RUNTIME=true` y seleccionar el modo con `AGIX_RUNTIME_PROFILE=strict_compatible`.
+Por defecto, `agicore_core/config/qualia_profile.json` arranca en modo seguro local (`runtime_profile=local_safe`) con `require_agix_runtime=false`, por lo que una instalación limpia funciona sin AGIX y mantiene políticas locales, auditoría y restricciones morales/legales con adaptadores avanzados desactivados. El modo degradado y el modo estricto siguen disponibles: se puede apuntar a un perfil alternativo con `AGICORE_QUALIA_PROFILE`, exigir runtime real con `AGIX_REQUIRE_RUNTIME=true` y seleccionar explícitamente el modo estricto con `AGIX_RUNTIME_PROFILE=strict_compatible`.
 
 La API de Responses y los backends de inferencia pueden gobernarse con `CoreQualiaEngine`: cada petición se evalúa antes de invocar al GPT, y los tokens/chunks generados vuelven a pasar por Qualia para bloquear contenido ilegal o inseguro antes de emitirse. Las respuestas bloqueadas comparten un formato auditable con `reason`, `legal_policy_action`, `violated_constraints`, `safe_alternative` y `decision_audit`.
 
