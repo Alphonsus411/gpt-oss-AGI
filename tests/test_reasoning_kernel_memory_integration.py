@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from agicore_core.reasoning_kernel import ReasoningKernel
 from gpt_oss.strategic_memory import Episode, StrategicMemory
@@ -16,7 +16,7 @@ def test_token_cycle_uses_memory_and_records_episode():
     memory = StrategicMemory()
     memory.add_episode(
         Episode(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             input="",  # contenido irrelevante
             action="token",
             outcome="",
@@ -38,7 +38,7 @@ def test_token_cycle_filters_disallowed_keys():
     memory = StrategicMemory()
     memory.add_episode(
         Episode(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             input="",
             action="token",
             outcome="",
@@ -69,7 +69,7 @@ def test_token_cycle_restores_allowed_qualia_metadata():
     memory = StrategicMemory()
     memory.add_episode(
         Episode(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             input="",
             action="token",
             outcome="",

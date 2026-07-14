@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping
 
 from gpt_oss.strategic_memory import Episode
@@ -89,7 +89,7 @@ class QualiaTrainingBridge:
     def to_memory_episode(feedback: TrainingFeedback) -> Episode:
         signal = (feedback.accepted_signals or feedback.rejected_signals)[0]
         return Episode(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             input=signal.sample,
             action="training_signal",
             outcome=feedback.reason,
