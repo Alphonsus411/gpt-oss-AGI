@@ -43,6 +43,8 @@ def _write_profile(tmp_path, monkeypatch, payload):
     profile_path = tmp_path / "qualia_profile.json"
     profile_path.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setenv("AGICORE_QUALIA_PROFILE", str(profile_path))
+    monkeypatch.delenv("AGIX_REQUIRE_RUNTIME", raising=False)
+    monkeypatch.delenv("AGIX_RUNTIME_PROFILE", raising=False)
     return profile_path
 
 
@@ -155,6 +157,33 @@ def test_local_safe_starts_without_agix_and_keeps_advanced_adapters_disabled(
     assert node._cognition.enabled is False
     assert enriched["qualia"]["version_policy_action"] == "local_safe_no_agix_adapters"
 
+
+
+def test_packaged_profile_clean_load_starts_local_safe_without_agix(monkeypatch):
+    from agicore_core import agix_compat
+    from agicore_core.qualia_node import QualiaNode
+
+    _purge_fake_agix(monkeypatch)
+    monkeypatch.delenv("AGICORE_QUALIA_PROFILE", raising=False)
+    monkeypatch.delenv("AGIX_REQUIRE_RUNTIME", raising=False)
+    monkeypatch.delenv("AGIX_RUNTIME_PROFILE", raising=False)
+    monkeypatch.setattr(
+        agix_compat.metadata,
+        "version",
+        lambda name: (_ for _ in ()).throw(
+            agix_compat.metadata.PackageNotFoundError(name)
+        ),
+    )
+
+    node = QualiaNode()
+    enriched = node.enrich_request({"task": "arranque limpio local"}, phase="test")
+
+    assert node.profile["require_agix_runtime"] is False
+    assert node.runtime_profile == "local_safe"
+    assert node.compatibility_report.mode == "local_safe"
+    assert node._evolution.genetic_agent is None
+    assert node._cognition.enabled is False
+    assert enriched["qualia"]["version_policy_action"] == "local_safe_no_agix_adapters"
 
 def test_degraded_allows_partial_incompatible_agix_and_reports_degradation(
     tmp_path, monkeypatch

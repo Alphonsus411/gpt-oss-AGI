@@ -42,7 +42,11 @@ pip install -e .[agix-data]
 pip install -e .[agix-full]
 ```
 
-La configuración `agicore_core/config/qualia_profile.json` permite alternar entre:
+La configuración empaquetada `agicore_core/config/qualia_profile.json` usa
+`runtime_profile=local_safe` y `require_agix_runtime=false` por defecto. Por
+ello, una carga limpia del paquete arranca sin AGIX y conserva políticas
+locales, auditoría y restricciones morales/legales mientras deja desactivados
+los adaptadores avanzados. El mismo archivo permite alternar entre:
 
 - `local_safe`: AGIX no disponible; se aplican políticas locales.
 - `degraded`: versión AGIX no compatible; se desactivan capacidades avanzadas.
@@ -51,8 +55,8 @@ La configuración `agicore_core/config/qualia_profile.json` permite alternar ent
 Variables relevantes:
 
 - `AGICORE_QUALIA_PROFILE`: ruta a un perfil alternativo.
-- `AGIX_REQUIRE_RUNTIME=true`: exige runtime real.
-- `AGIX_RUNTIME_PROFILE=strict_compatible`: selecciona modo estricto.
+- `AGIX_REQUIRE_RUNTIME=true`: exige runtime real y bloquea el arranque si AGIX falta o no es compatible.
+- `AGIX_RUNTIME_PROFILE=strict_compatible`: selecciona modo estricto de forma explícita.
 
 ## Flujo de decisión seguro
 

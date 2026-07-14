@@ -152,12 +152,12 @@
     "input_size": 4,
     "output_size": 2
   },
-  "require_agix_runtime": true,
+  "require_agix_runtime": false,
   "agix_runtime_modes": {
     "local_safe": "AGIX no disponible; se aplican políticas locales.",
     "degraded": "Versión AGIX no compatible; se desactivan capacidades avanzadas.",
     "strict_compatible": "AGIX requerido y compatible activo."
   },
-  "runtime_profile": "strict_compatible",
+  "runtime_profile": "local_safe",
   "enforce_strict_component_contract": false
 }

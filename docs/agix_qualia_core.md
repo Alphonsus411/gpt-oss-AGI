@@ -38,11 +38,18 @@ señales genéticas y las señales neuromórficas.
 
 ### Modos AGIX 1.9.0
 
-- `strict_compatible`: AGIX 1.9.0 está instalado y sus componentes avanzados se
-  pueden usar.
+El perfil empaquetado arranca por defecto en `local_safe` con
+`require_agix_runtime=false`, de modo que una instalación limpia del fork puede
+crear `QualiaNode` sin AGIX instalado. El modo estricto sigue disponible, pero
+debe solicitarse de forma explícita con un perfil alternativo o con
+`AGIX_RUNTIME_PROFILE=strict_compatible` y, si se quiere bloquear el arranque
+cuando falte AGIX, `AGIX_REQUIRE_RUNTIME=true`.
+
 - `local_safe`: AGIX no está disponible; se mantienen restricciones morales,
   políticas locales y auditoría, pero se desactivan algoritmos genéticos y
   patrones neuromórficos cuando la política es `block_advanced`.
+- `strict_compatible`: AGIX 1.9.0 está instalado y sus componentes avanzados se
+  pueden usar.
 - `degraded` o `advanced_blocked`: la versión instalada no coincide con la
   validada; se bloquean capacidades avanzadas salvo política explícita `warn`.
 - `version_warn`: permite operar con advertencia cuando el perfil lo solicita.
