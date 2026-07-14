@@ -69,3 +69,10 @@ cmake.args = [
 ]
 [tool.scikit-build.wheel]
 packages = ["gpt_oss"] # copy the whole Python package tree
+
+[tool.ruff.lint]
+# The current fork still contains upstream scripts and tests with deliberate
+# late imports for path bootstrapping/stubbing plus legacy unused symbols.
+# Keep CI focused on running Ruff consistently while those categories are
+# addressed in dedicated cleanup changes.
+ignore = ["E402", "F401", "F402", "F541", "F841"]

@@ -1,0 +1,21 @@
+{
+  "include": [
+    "agicore_core",
+    "gpt_oss",
+    "meta_router.py",
+    "tests"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "gpt_oss/triton",
+    "gpt_oss/vllm",
+    "gpt_oss/metal",
+    "gpt_oss/evals",
+    "gpt-oss-mcp-server",
+    "examples",
+    "tests_ollama"
+  ],
+  "typeCheckingMode": "off",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "warning"
+}
