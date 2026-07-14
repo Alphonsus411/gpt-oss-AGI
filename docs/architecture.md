@@ -27,7 +27,7 @@ Durante rebases, merges o comparaciones con upstream deben preservarse estos mó
 1. **Capa upstream gpt-oss**: modelos, tokenizer, Harmony, backends Triton/Metal/Transformers/vLLM/Ollama y servidor Responses API.
 2. **Core Qualia/AGIX (`agicore_core`)**: `CoreQualiaEngine` centraliza `before_decision`, `govern_decision` y `after_decision`; `QualiaNode` enriquece solicitudes con políticas, patrones y decisiones.
 3. **SafetyGate contextual**: bloquea antes de invocar GPT, router o backend cuando Qualia marca riesgo moral, legal, ontoético o inseguro.
-4. **Responses API guardada**: `QualiaGuardedInference` ejecuta preflight antes de tokens y post-check por token; `OutputSafetyScanner` inspecciona prompts, tool calls, chunks de streaming y respuesta final.
+4. **Responses API guardada**: `QualiaGuardedInference` ejecuta preflight inicial, checkpoints configurables y checks obligatorios en tool calls/final; `OutputSafetyScanner` inspecciona prompts, tool calls, chunks de streaming y respuesta final con ventanas incrementales.
 5. **Memoria estratégica**: `StrategicMemory` usa un backend en RAM por defecto o `SQLiteMemoryBackend` para persistencia transaccional.
 6. **Planner/MetaRouter**: consumen memoria episódica para ajustar modos, rutas y expertos sin aprender de episodios bloqueados por Qualia.
 

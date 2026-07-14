@@ -2,12 +2,12 @@
 """Benchmark reproducible de streaming Responses con gobierno Qualia.
 
 Mide latencia de preflight, latencia por chunk y tokens/s en tres modos:
-- sin Qualia;
+- Qualia disabled;
 - Qualia local_safe;
 - AGIX/Qualia strict_compatible cuando el runtime lo permite.
 
 El benchmark usa una fuente determinista de tokens para aislar el coste de la
-capa Qualia sin requerir GPU. Si se activa strict y AGIX no cumple el contrato,
+capa Qualia incremental sin requerir GPU. Si se activa strict y AGIX no cumple el contrato,
 el modo se marca como no disponible en lugar de fallar.
 """
 
@@ -31,7 +31,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from agicore_core.agix_compat import AgixStrictCompatibilityError
+from agicore_core.qualia_engine import CoreQualiaEngine
 from agicore_core.qualia_node import QualiaNode
+from gpt_oss.responses_api.inference.qualia_guard import OutputSafetyScanner
 
 DEFAULT_PROMPT = (
     "Resume las garantías de seguridad de Qualia en respuestas por streaming "
@@ -104,7 +106,7 @@ def chunk_tokens(tokens: list[str], chunk_size: int) -> Iterator[list[str]]:
 
 
 def build_node(mode: str) -> QualiaNode | None:
-    if mode == "none":
+    if mode == "disabled":
         return None
     with temporary_env(
         {
@@ -122,9 +124,17 @@ def run_iteration(
     state: dict[str, Any] = {"stream": True}
 
     start = time.perf_counter()
+    scanner: OutputSafetyScanner | None = None
     if node is not None:
         request = node.enrich_request(request, phase="responses.preflight")
         if request.get("qualia", {}).get("blocked"):
+            raise RuntimeError("El prompt de benchmark fue bloqueado por Qualia")
+        scanner = OutputSafetyScanner(
+            qualia_engine=CoreQualiaEngine(),
+            base_request={"task": "responses_api_benchmark", "prompt": prompt},
+        )
+        _, blocked = scanner.evaluate_initial_prompt(prompt, phase="responses.preflight")
+        if blocked is not None:
             raise RuntimeError("El prompt de benchmark fue bloqueado por Qualia")
     preflight = time.perf_counter() - start
 
@@ -134,7 +144,10 @@ def run_iteration(
     for chunk in chunk_tokens(tokens, chunk_size):
         chunk_start = time.perf_counter()
         text = " ".join(chunk)
-        if node is not None:
+        if node is not None and scanner is not None:
+            _, blocked = scanner.scan_stream_chunk(text, phase="responses.chunk")
+            if blocked is not None:
+                raise RuntimeError("El chunk de benchmark fue bloqueado por Qualia")
             state = node.integrate_response(
                 {
                     "type": "response.output_text.delta",
@@ -146,6 +159,8 @@ def run_iteration(
             )
         emitted += len(chunk)
         chunk_latencies.append(time.perf_counter() - chunk_start)
+    if scanner is not None:
+        scanner.scan_final_response(" ".join(tokens), phase="responses.final")
     elapsed = time.perf_counter() - generation_start
     return preflight, chunk_latencies, emitted / elapsed if elapsed > 0 else 0.0
 
@@ -241,7 +256,7 @@ Ejecutar localmente:
 ```
 
 El benchmark no requiere GPU: usa tokens deterministas para medir el coste de
-preflight y streaming de la capa Responses/Qualia. El modo `strict_compatible`
+preflight, ventanas incrementales y finalización de la capa Responses/Qualia. El modo `strict_compatible`
 solo se mide con `--strict-agix`; si AGIX 1.9.0 o sus componentes estrictos no
 están disponibles, queda registrado como `Disponible = no` sin fallar el comando.
 
@@ -274,7 +289,7 @@ def main() -> int:
         warmup=args.warmup,
         strict_agix=args.strict_agix,
     )
-    modes = ["none", "local_safe"] + (["strict_compatible"] if args.strict_agix else [])
+    modes = ["disabled", "local_safe"] + (["strict_compatible"] if args.strict_agix else [])
     results = [benchmark_mode(mode, config) for mode in modes]
 
     payload = {

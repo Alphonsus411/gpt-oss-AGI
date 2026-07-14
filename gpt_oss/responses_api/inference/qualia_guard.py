@@ -139,12 +139,43 @@ class OutputSafetyScanner:
         return enriched, blocked
 
 
-class QualiaGuardedInference:
-    """Protege inferencias directas con gobierno central Qualia."""
+@dataclass
+class _InferenceRequestState:
+    """Estado incremental interno de una inferencia directa protegida."""
 
-    def __init__(self, backend: Callable[..., int], qualia_engine: CoreQualiaEngine | None = None) -> None:
+    scanner: OutputSafetyScanner
+    tokens_seen: int = 0
+    degraded_token_id_only: bool = False
+
+
+class QualiaGuardedInference:
+    """Protege inferencias directas con gobierno central Qualia.
+
+    La protección ya no ejecuta Qualia por cada token benigno. Cada request
+    mantiene un :class:`OutputSafetyScanner` incremental que reevalúa solo el
+    preflight inicial, tool calls, respuesta final, ventanas localmente riesgosas
+    y checkpoints configurables.
+
+    Modo degradado: algunos backends actuales solo devuelven IDs de token y no
+    exponen texto decodificado en ``request_state``. En ese caso no hay contenido
+    nuevo para aplicar heurísticas locales; se conserva el preflight inicial y se
+    ejecutan checkpoints sobre metadatos cada ``checkpoint_interval`` tokens,
+    además de tool calls/final si el caller los entrega explícitamente.
+    """
+
+    def __init__(
+        self,
+        backend: Callable[..., int],
+        qualia_engine: CoreQualiaEngine | None = None,
+        *,
+        checkpoint_interval: int = 64,
+        scanner_factory: Callable[..., OutputSafetyScanner] = OutputSafetyScanner,
+    ) -> None:
         self.backend = backend
         self.qualia_engine = qualia_engine or CoreQualiaEngine()
+        self.checkpoint_interval = max(1, checkpoint_interval)
+        self.scanner_factory = scanner_factory
+        self._request_state: _InferenceRequestState | None = None
 
     def preflight(self, request: Mapping[str, Any], *, phase: str = "inference_pre") -> tuple[dict[str, Any], dict[str, Any] | None]:
         enriched, blocked = self.qualia_engine.govern_decision(request, phase=phase)
@@ -154,16 +185,102 @@ class QualiaGuardedInference:
             return enriched, formatted
         return enriched, None
 
+    @property
+    def qualia_calls(self) -> int:
+        """Número de llamadas Qualia del escáner incremental activo."""
+
+        return self._request_state.scanner.qualia_calls if self._request_state else 0
+
     def __call__(self, tokens: list[int], temperature: float = 0.0, new_request: bool = False, *, request_state: Mapping[str, Any] | None = None) -> int:
         state = dict(request_state or {})
-        state.update({"task": "responses_api_token", "tokens_seen": len(tokens)})
-        _, blocked = self.preflight(state, phase="inference_pre")
-        if blocked is not None:
-            raise RuntimeError(blocked["message"])
+        if new_request or self._request_state is None:
+            self._start_request(state, len(tokens))
+        assert self._request_state is not None
+
+        self._scan_request_events(state)
         token = self.backend(tokens, temperature=temperature, new_request=new_request)
-        post_state = {**state, "last_token_id": token}
-        enriched, blocked = self.preflight(post_state, phase="inference_token")
-        if blocked is not None:
-            raise RuntimeError(blocked["message"])
-        self.qualia_engine.after_decision({"token": token}, enriched, phase="inference_token")
+        self._request_state.tokens_seen = max(self._request_state.tokens_seen + 1, len(tokens) + 1)
+
+        decoded = self._extract_decoded_delta(state)
+        if decoded:
+            self._raise_if_blocked(
+                self._request_state.scanner.scan_stream_chunk(decoded, phase="inference_stream")[1]
+            )
+        else:
+            self._request_state.degraded_token_id_only = True
+
+        if self._should_checkpoint(state):
+            checkpoint = {
+                **state,
+                "task": state.get("task", "responses_api_token_checkpoint"),
+                "tokens_seen": self._request_state.tokens_seen,
+                "last_token_id": token,
+                "degraded_token_id_only": self._request_state.degraded_token_id_only,
+            }
+            _, blocked = self.preflight(checkpoint, phase="inference_checkpoint")
+            self._raise_if_blocked(blocked)
+
+        self.qualia_engine.after_decision(
+            {"token": token, "degraded_token_id_only": self._request_state.degraded_token_id_only},
+            {"tokens_seen": self._request_state.tokens_seen},
+            phase="inference_token",
+        )
         return token
+
+    def _start_request(self, state: Mapping[str, Any], tokens_seen: int) -> None:
+        prompt = self._extract_prompt(state)
+        scanner = self.scanner_factory(qualia_engine=self.qualia_engine, base_request=state)
+        self._request_state = _InferenceRequestState(scanner=scanner, tokens_seen=tokens_seen)
+        _, blocked = scanner.evaluate_initial_prompt(prompt, phase="inference_pre")
+        self._raise_if_blocked(blocked)
+
+    def _scan_request_events(self, state: Mapping[str, Any]) -> None:
+        assert self._request_state is not None
+        for tool_call in self._iter_tool_calls(state):
+            _, blocked = self._request_state.scanner.scan_tool_call(
+                str(tool_call.get("name", tool_call.get("tool", "unknown"))),
+                str(tool_call.get("arguments", tool_call.get("args", ""))),
+                phase="inference_tool_call",
+            )
+            self._raise_if_blocked(blocked)
+
+        final_text = state.get("final_text") or state.get("final_response")
+        if final_text is not None or state.get("final"):
+            _, blocked = self._request_state.scanner.scan_final_response(
+                str(final_text) if final_text is not None else None,
+                phase="inference_final",
+            )
+            self._raise_if_blocked(blocked)
+
+    def _should_checkpoint(self, state: Mapping[str, Any]) -> bool:
+        assert self._request_state is not None
+        interval = int(state.get("qualia_checkpoint_interval", self.checkpoint_interval) or self.checkpoint_interval)
+        interval = max(1, interval)
+        return self._request_state.tokens_seen % interval == 0
+
+    def _extract_prompt(self, state: Mapping[str, Any]) -> str:
+        prompt = state.get("prompt", state.get("input", state.get("decoded_text", "")))
+        if isinstance(prompt, list):
+            return "\n".join(str(item) for item in prompt)
+        return str(prompt)
+
+    def _extract_decoded_delta(self, state: Mapping[str, Any]) -> str:
+        for key in ("decoded_delta", "delta", "token_text", "text_delta"):
+            value = state.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    def _iter_tool_calls(self, state: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+        tool_calls = state.get("tool_calls") or state.get("tool_call")
+        if tool_calls is None:
+            return []
+        if isinstance(tool_calls, Mapping):
+            return [tool_calls]
+        if isinstance(tool_calls, list):
+            return [item for item in tool_calls if isinstance(item, Mapping)]
+        return []
+
+    def _raise_if_blocked(self, blocked: Mapping[str, Any] | None) -> None:
+        if blocked is not None:
+            raise RuntimeError(str(blocked.get("message", "blocked by Qualia")))
