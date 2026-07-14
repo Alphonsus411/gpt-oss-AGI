@@ -5,12 +5,16 @@ on:
   push:
     branches:
       - "**"
-    tags:
-      - "v*"
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
+      run_real_harmony_responses:
+        description: "Run real Harmony/Responses API job"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
       run_qualia_benchmark:
         description: "Run optional Responses/Qualia benchmark"
         required: false
@@ -20,15 +24,16 @@ on:
           - "false"
           - "true"
 
-# Minimal repo-level permissions; job-level permissions override where needed.
 permissions:
   contents: read
-  id-token: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-
-  test:
-    name: Unit and Integration Tests
+  tests-without-agix:
+    name: Tests without AGIX
     runs-on: ubuntu-latest
 
     steps:
@@ -36,18 +41,225 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+
+      - name: Install package and test dependencies without AGIX runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python -m pip uninstall -y agix || true
+
+      - name: Verify AGIX is absent
+        run: |
+          python - <<'PY'
+          import importlib.util
+          raise SystemExit(0 if importlib.util.find_spec("agix") is None else "agix unexpectedly installed")
+          PY
+
+      - name: Run local-safe tests without AGIX
+        env:
+          AGIX_RUNTIME_PROFILE: local_safe
+        run: |
+          pytest -m "not external_resource"
+
+  tests-with-agix:
+    name: Tests with agix==1.9.0
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package, tests, and pinned AGIX
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          python -m pip install "agix==1.9.0"
+
+      - name: Verify AGIX version
+        run: |
+          python - <<'PY'
+          from importlib import metadata
+          assert metadata.version("agix") == "1.9.0"
+          PY
+
+      - name: Run tests with AGIX available
+        env:
+          AGIX_RUNTIME_PROFILE: degraded
+        run: |
+          pytest -m "not external_resource"
+
+  real-harmony-responses:
+    name: Real Harmony and Responses API
+    if: github.event_name != 'workflow_dispatch' || inputs.run_real_harmony_responses == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
 
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[test]"
 
-      - name: Run tests without Harmony stubs
+      - name: Run real Harmony/Responses API tests
+        env:
+          AGIX_RUNTIME_PROFILE: local_safe
         run: |
           pytest tests/test_responses_api.py -m "unit or integration"
+
+  ruff:
+    name: Ruff check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Ruff
+        run: |
+          python -m pip install --upgrade pip ruff
+
+      - name: Run Ruff
+        run: |
+          ruff check .
+
+  type-check:
+    name: Type checking with pyright
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and Pyright
+        run: |
+          python -m pip install --upgrade pip pyright
+          python -m pip install -e ".[test]"
+
+      - name: Run Pyright
+        run: |
+          pyright
+
+  build:
+    name: Build wheel and sdist
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install build backend
+        run: |
+          python -m pip install --upgrade pip build
+
+      - name: Build distributions
+        run: |
+          python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  install-artifacts:
+    name: Clean install wheel and sdist
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        artifact-type: [wheel, sdist]
+
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ${{ matrix.artifact-type }} in a clean venv
+        shell: bash
+        run: |
+          python -m venv /tmp/gpt-oss-agi-install-check
+          source /tmp/gpt-oss-agi-install-check/bin/activate
+          python -m pip install --upgrade pip
+          if [ "${{ matrix.artifact-type }}" = "wheel" ]; then
+            python -m pip install dist/*.whl
+          else
+            python -m pip install dist/*.tar.gz
+          fi
+          python - <<'PY'
+          import gpt_oss
+          import agicore_core
+          print("installed", gpt_oss.__name__, agicore_core.__name__)
+          PY
+
+  dependency-audit:
+    name: Dependency audit with pip-audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package and pip-audit
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          python -m pip install -e ".[test]"
+
+      - name: Run pip-audit
+        run: |
+          pip-audit
+
   optional-qualia-benchmark:
     name: Optional Responses/Qualia Benchmark
     if: github.event_name == 'workflow_dispatch' && inputs.run_qualia_benchmark == 'true'
@@ -59,9 +271,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Install package
         run: |
@@ -79,49 +292,3 @@ jobs:
           name: qualia-benchmark-results
           path: benchmark-results/
           if-no-files-found: ignore
-
-  publish:
-    name: Build & Publish to PyPI (Trusted Publishing)
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-
-    # Run in the GitHub environment named "release" so you can gate it with approvals.
-    environment: release
-
-    # Extra permissions required for pypa action to do OIDC exchange:
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip setuptools wheel build
-
-      - name: Install uv (if needed)
-        run: |
-          python -m pip install --upgrade uv || true
-
-      - name: Build package with uv
-        run: |
-          pwd
-          ls -la
-          uv build
-
-      - name: Inspect dist folder
-        run: |
-          ls -la dist || ls -la build || echo "no dist/ or build/ — check uv output"
-
-      - name: Publish to PyPI using Trusted Publishing
-        # Note: No pypi_token / username / password provided — Trusted Publishing via OIDC is used.
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          attestations: true # optional (default for Trusted Publishing) - set to false to disable
