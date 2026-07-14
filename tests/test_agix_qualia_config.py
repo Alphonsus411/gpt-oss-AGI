@@ -14,7 +14,7 @@ def test_agix_version_is_consistent_across_project_files():
         )
     )
 
-    assert f"agix=={AGIX_REQUIRED_VERSION}" in pyproject
+    assert f'agix = ["agix=={AGIX_REQUIRED_VERSION}"]' in pyproject
     assert f"agix=={AGIX_REQUIRED_VERSION}" in requirements
     assert profile["agix_required_version"] == AGIX_REQUIRED_VERSION
 

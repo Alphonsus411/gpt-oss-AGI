@@ -32,8 +32,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tests-without-agix:
-    name: Tests without AGIX
+  local_safe:
+    name: local_safe without AGIX
     runs-on: ubuntu-latest
 
     steps:
@@ -65,8 +65,8 @@ jobs:
         run: |
           pytest -m "not external_resource"
 
-  tests-with-agix:
-    name: Tests with agix==1.9.0
+  strict_compatible:
+    name: strict_compatible with AGIX 1.9.0
     runs-on: ubuntu-latest
 
     steps:
@@ -79,11 +79,10 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install package, tests, and pinned AGIX
+      - name: Install package, tests, and AGIX extra
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[test]"
-          python -m pip install "agix==1.9.0"
+          python -m pip install -e ".[test,agix]"
 
       - name: Verify AGIX version
         run: |
@@ -92,9 +91,9 @@ jobs:
           assert metadata.version("agix") == "1.9.0"
           PY
 
-      - name: Run tests with AGIX available
+      - name: Run strict-compatible tests with AGIX available
         env:
-          AGIX_RUNTIME_PROFILE: degraded
+          AGIX_RUNTIME_PROFILE: strict_compatible
         run: |
           pytest -m "not external_resource"
 

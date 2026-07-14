@@ -8,8 +8,8 @@ El workflow `CI` se ejecuta en `pull_request`, en cualquier `push` de rama y man
 
 Jobs principales:
 
-1. **Tests without AGIX**: instala el proyecto con dependencias de test, desinstala `agix` y ejecuta la suite local con `AGIX_RUNTIME_PROFILE=local_safe`. Esto valida que el modo seguro/fallback funciona sin el runtime AGIX instalado.
-2. **Tests with `agix==1.9.0`**: instala explícitamente `agix==1.9.0`, comprueba la versión instalada y ejecuta la suite local con el perfil degradado.
+1. **`local_safe` without AGIX**: instala el proyecto con dependencias de test, desinstala `agix` si aparece transitivamente y ejecuta la suite local con `AGIX_RUNTIME_PROFILE=local_safe`. Este job no requiere AGIX y valida que el modo seguro/fallback funciona sin el runtime instalado.
+2. **`strict_compatible` with AGIX 1.9.0**: instala el paquete con `.[test,agix]`, comprueba que la versión instalada sea exactamente `agix==1.9.0` y ejecuta la suite local con `AGIX_RUNTIME_PROFILE=strict_compatible`. Este job sí exige AGIX 1.9.0.
 3. **Real Harmony and Responses API**: ejecuta `tests/test_responses_api.py` usando el paquete real `openai-harmony` y el servidor Responses API del repositorio.
 4. **Ruff check**: ejecuta `ruff check .`.
 5. **Type checking with pyright**: instala el paquete en modo editable y ejecuta `pyright`.
@@ -30,6 +30,6 @@ El job usa el entorno protegido `release` y Trusted Publishing mediante OIDC (`i
 
 ## Recomendaciones de mantenimiento
 
-- Mantener la versión de AGIX sincronizada con `pyproject.toml`, `requirements.txt` y `agicore_core/config/qualia_profile.json`.
+- Mantener la versión de AGIX sincronizada entre los extras de `pyproject.toml`, `requirements.txt` cuando se use como lock/runtime estricto, y `agicore_core/config/qualia_profile.json`.
 - Si `ruff`, `pyright` o `pip-audit` empiezan a fallar por deuda técnica existente, corregir la configuración o las exclusiones en un cambio separado antes de hacerlos obligatorios para protección de rama.
 - Revisar periódicamente que `publish.yml` siga apuntando al entorno protegido `release` y que el proyecto en PyPI tenga Trusted Publishing configurado para este repositorio.

@@ -17,8 +17,24 @@ import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from agicore_core import Planner, ReasoningKernel
-from agix.orchestrator import VirtualQualia
+from agicore_core.agix_compat import AgixStrictCompatibilityError, load_first_component
+from agicore_core.config import AGIX_REQUIRED_VERSION
 from meta_router import MetaRouter
+
+
+def _load_virtual_qualia():
+    """Carga VirtualQualia mediante la capa compat para evitar imports directos de AGIX."""
+
+    component, status = load_first_component(
+        "virtual_qualia", (("agix.orchestrator", "VirtualQualia"),)
+    )
+    if component is None:
+        detail = f" Detalle: {status.error}" if status.error else ""
+        raise AgixStrictCompatibilityError(
+            f"Este ejemplo requiere instalar AGIX {AGIX_REQUIRED_VERSION} con "
+            f"`pip install -e .[agix]`.{detail}"
+        )
+    return component
 
 
 class DummyExpert:
@@ -76,6 +92,7 @@ def main() -> None:  # pragma: no cover - ejemplo interactivo
         "goals": ["multiply"],
         "data": {"a": 2, "b": 3},
     }
+    VirtualQualia = _load_virtual_qualia()
     orchestrator = VirtualQualia(clients=[PlanClient(step_sum), PlanClient(step_mul)])
     planner = Planner(orchestrator)
     plan = planner.plan({"objective": "demo"})

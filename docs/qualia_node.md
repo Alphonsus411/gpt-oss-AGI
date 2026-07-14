@@ -2,7 +2,7 @@
 
 ## Tareas estructuradas implementadas
 
-1. **Actualizar AGIX a PyPI 1.9.0**: fijar la dependencia `agix==1.9.0` en los scripts de instalación y en las dependencias del paquete.
+1. **Actualizar AGIX a PyPI 1.9.0**: fijar `agix==1.9.0` en extras explícitos y scripts de instalación estricta, no en la instalación base.
 2. **Crear el nodo Qualia**: añadir una capa `QualiaNode` en `agicore_core` con políticas ontoéticas, patrones cognitivos y detección de versión AGIX.
 3. **Integrar el nodo en el engine GPT**: enriquecer todas las llamadas del `ReasoningKernel` y del kernel secuencial antes de pasar por `MetaRouter`.
 4. **Aplicar respuesta al estado**: registrar la huella Qualia tras cada paso o token para que el estado interno del GPT quede afectado por el nodo.
