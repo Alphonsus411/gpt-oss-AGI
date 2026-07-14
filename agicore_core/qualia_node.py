@@ -6,6 +6,8 @@ import importlib
 import json
 import os
 import sys
+
+import structlog
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
@@ -19,7 +21,15 @@ from .agix_compat import (
     module_available,
 )
 from .config import AGIX_REQUIRED_VERSION
+from .domain_errors import QualiaPolicyError
 from .safety_gate import SafetyCategory, SafetyDecision, SafetyEvidence, SafetyIntent
+
+
+LOGGER = structlog.get_logger(__name__)
+
+
+def _safe_error_context(exc: BaseException) -> Dict[str, str]:
+    return {"error_type": type(exc).__name__}
 
 
 @dataclass(frozen=True)
@@ -342,7 +352,12 @@ class QualiaNode:
         if eco_cls is not None:
             try:
                 self._ecoethics = eco_cls()
-            except Exception:
+            except Exception as exc:
+                LOGGER.warning(
+                    "qualia.component_unavailable",
+                    component="ecoethics",
+                    **_safe_error_context(exc),
+                )
                 self._ecoethics = None
         moral_cls, _ = load_first_component(
             "moral_evaluator",
@@ -356,7 +371,12 @@ class QualiaNode:
         if moral_cls is not None:
             try:
                 self._moral_evaluator = moral_cls()
-            except Exception:
+            except Exception as exc:
+                LOGGER.warning(
+                    "qualia.component_unavailable",
+                    component="moral_evaluator",
+                    **_safe_error_context(exc),
+                )
                 self._moral_evaluator = None
         spirit_cls, _ = load_first_component(
             "qualia_spirit",
@@ -368,7 +388,12 @@ class QualiaNode:
         if spirit_cls is not None:
             try:
                 self._spirit = spirit_cls("GPT-OSS-Qualia")
-            except Exception:
+            except Exception as exc:
+                LOGGER.warning(
+                    "qualia.component_unavailable",
+                    component="qualia_spirit",
+                    **_safe_error_context(exc),
+                )
                 self._spirit = None
         memory_cls, _ = load_first_component(
             "memory_manager", (("agix.memory", "GestorDeMemoria"),)
@@ -376,7 +401,12 @@ class QualiaNode:
         if memory_cls is not None:
             try:
                 self._memory_manager = memory_cls()
-            except Exception:
+            except Exception as exc:
+                LOGGER.warning(
+                    "qualia.component_unavailable",
+                    component="memory_manager",
+                    **_safe_error_context(exc),
+                )
                 self._memory_manager = None
         engine_cls, _ = load_first_component(
             "qualia_engine", (("agix.qualia", "QualiaEngine"),)
@@ -387,7 +417,12 @@ class QualiaNode:
                     self._qualia_engine = engine_cls(self._memory_manager)
                 else:
                     self._qualia_engine = engine_cls()
-            except Exception:
+            except Exception as exc:
+                LOGGER.warning(
+                    "qualia.component_unavailable",
+                    component="qualia_engine",
+                    **_safe_error_context(exc),
+                )
                 self._qualia_engine = None
 
     def enrich_request(
@@ -913,8 +948,13 @@ class QualiaNode:
                 result = method(dict(request))
             except TypeError:
                 result = method(text)
-            except Exception:
-                break
+            except Exception as exc:
+                LOGGER.error(
+                    "qualia.moral_evaluator_failed",
+                    method=method_name,
+                    **_safe_error_context(exc),
+                )
+                raise QualiaPolicyError(detail=type(exc).__name__) from exc
             agix_violation = self._normalize_agix_moral_result(result, text)
             return [agix_violation] if agix_violation else []
         return []
