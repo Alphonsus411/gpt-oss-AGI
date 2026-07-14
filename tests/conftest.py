@@ -108,18 +108,26 @@ def mock_python_tool():
 
 @pytest.fixture(autouse=True)
 def reset_test_environment():
-    test_env_vars = ['OPENAI_API_KEY', 'GPT_OSS_MODEL_PATH']
-    original_values = {}
-    
-    for var in test_env_vars:
-        if var in os.environ:
-            original_values[var] = os.environ[var]
-            del os.environ[var]
-    
+    test_env_vars = [
+        'OPENAI_API_KEY',
+        'GPT_OSS_MODEL_PATH',
+        'AGIX_RUNTIME_PROFILE',
+        'AGIX_REQUIRE_RUNTIME',
+    ]
+    original_values = {var: os.environ.get(var) for var in test_env_vars}
+
+    os.environ["AGIX_RUNTIME_PROFILE"] = "local_safe"
+    os.environ["AGIX_REQUIRE_RUNTIME"] = "0"
+    for var in ('OPENAI_API_KEY', 'GPT_OSS_MODEL_PATH'):
+        os.environ.pop(var, None)
+
     yield
-    
+
     for var, value in original_values.items():
-        os.environ[var] = value
+        if value is None:
+            os.environ.pop(var, None)
+        else:
+            os.environ[var] = value
 
 
 @pytest.fixture

@@ -9,6 +9,13 @@ from .safety_gate import SafetyGate
 from .training_bridge import QualiaTrainingBridge, TrainingSignal, TrainingFeedback
 from .neuro_symbolic_bridge import CoreNeuroSymbolicBridge
 from .config import AGIX_REQUIRED_VERSION
+from .domain_errors import (
+    DomainError,
+    HarmonyParseError,
+    ToolCallValidationError,
+    QualiaPolicyError,
+    UnsafeOutputBlocked,
+)
 
 __all__ = [
     "Planner",
@@ -22,4 +29,9 @@ __all__ = [
     "TrainingFeedback",
     "CoreNeuroSymbolicBridge",
     "AGIX_REQUIRED_VERSION",
+    "DomainError",
+    "HarmonyParseError",
+    "ToolCallValidationError",
+    "QualiaPolicyError",
+    "UnsafeOutputBlocked",
 ]

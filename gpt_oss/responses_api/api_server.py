@@ -7,6 +7,7 @@ import uuid
 from typing import Callable, Literal, Optional
 import json
 
+import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -24,6 +25,11 @@ from openai_harmony import (
     ToolDescription,
 )
 
+from agicore_core.domain_errors import (
+    DomainError,
+    HarmonyParseError,
+    ToolCallValidationError,
+)
 from agicore_core.qualia_engine import CoreQualiaEngine
 from agicore_core.qualia_responses import format_blocked_response
 from gpt_oss.responses_api.inference.qualia_guard import OutputSafetyScanner
@@ -66,6 +72,38 @@ from .types import (
 )
 
 DEFAULT_TEMPERATURE = 0.0
+LOGGER = structlog.get_logger(__name__)
+SENSITIVE_LOG_KEYS = {
+    "prompt",
+    "instruction",
+    "instructions",
+    "arguments",
+    "output",
+    "decoded_text",
+    "accumulated_output_tail",
+    "api_key",
+    "authorization",
+    "password",
+    "token",
+    "secret",
+}
+
+
+def _redact_for_log(value):
+    if isinstance(value, dict):
+        return {
+            key: (
+                "[REDACTED]"
+                if str(key).lower() in SENSITIVE_LOG_KEYS
+                else _redact_for_log(child)
+            )
+            for key, child in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact_for_log(item) for item in value]
+    if isinstance(value, str):
+        return f"[REDACTED:{len(value)} chars]" if len(value) > 48 else value
+    return value
 
 
 def get_reasoning_effort(effort: Literal["low", "medium", "high"]) -> ReasoningEffort:
@@ -106,6 +144,20 @@ def create_api_server(
             status_code=422,
             content={"detail": _sanitize_validation_detail(exc.errors())},
         )
+    @app.exception_handler(DomainError)
+    async def domain_error_handler(request: Request, exc: DomainError):
+        LOGGER.warning(
+            "responses_api.domain_error",
+            error_code=exc.code,
+            error_type=type(exc).__name__,
+            path=request.url.path,
+            detail="[REDACTED]" if exc.detail else None,
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": {"code": exc.code, "message": exc.safe_message}},
+        )
+
     responses_store: dict[str, tuple[ResponsesRequest, ResponseObject]] = {}
     qualia_engine = CoreQualiaEngine()
 
@@ -211,10 +263,13 @@ def create_api_server(
                         output_tokens, Role.ASSISTANT
                     )
                 except Exception as e:
-                    print(f"Error parsing tokens: {e}")
+                    LOGGER.warning(
+                        "responses_api.harmony_parse_failed",
+                        error_type=type(e).__name__,
+                    )
                     error = Error(
                         code="invalid_function_call",
-                        message=f"{e}",
+                        message=HarmonyParseError.safe_message,
                     )
                     entries = []
             else:
@@ -284,8 +339,12 @@ def create_api_server(
                                 url=parsed_args["url"],
                             )
                     except Exception as e:
-                        print(f"Error processing browser tool arguments: {e}")
-                        action = None
+                        LOGGER.warning(
+                            "responses_api.tool_call_validation_failed",
+                            tool=function_name,
+                            error_type=type(e).__name__,
+                        )
+                        raise ToolCallValidationError(detail=type(e).__name__) from e
 
                     if action is not None:
                         if browser_call_ids and browser_tool_index < len(browser_call_ids):
@@ -357,16 +416,31 @@ def create_api_server(
 
         try:
             debug_str = encoding.decode_utf8(input_tokens + output_tokens)
-        except Exception:
-            debug_str = input_tokens + output_tokens
+        except Exception as exc:
+            LOGGER.warning(
+                "responses_api.debug_decode_failed",
+                field="combined",
+                error_type=type(exc).__name__,
+            )
+            debug_str = "[UNDECODABLE_TOKENS]"
         try:
             debug_input_str = encoding.decode_utf8(input_tokens)
-        except Exception:
-            debug_input_str = input_tokens
+        except Exception as exc:
+            LOGGER.warning(
+                "responses_api.debug_decode_failed",
+                field="input",
+                error_type=type(exc).__name__,
+            )
+            debug_input_str = "[UNDECODABLE_TOKENS]"
         try:
             debug_output_str = encoding.decode_utf8(output_tokens)
-        except Exception:
-            debug_output_str = output_tokens
+        except Exception as exc:
+            LOGGER.warning(
+                "responses_api.debug_decode_failed",
+                field="output",
+                error_type=type(exc).__name__,
+            )
+            debug_output_str = "[UNDECODABLE_TOKENS]"
 
         metadata = (
             {
@@ -497,7 +571,7 @@ def create_api_server(
             while True:
                 # Comprobar si el cliente se desconectó
                 if self.request is not None and await self.request.is_disconnected():
-                    print("Client disconnected, stopping token generation.")
+                    LOGGER.info("responses_api.client_disconnected")
                     break
                 next_tok = infer_next_token(
                     self.tokens,
@@ -509,7 +583,11 @@ def create_api_server(
                 try:
                     self.parser.process(next_tok)
                 except Exception as e:
-                    pass
+                    LOGGER.error(
+                        "responses_api.harmony_stream_parse_failed",
+                        error_type=type(e).__name__,
+                    )
+                    raise HarmonyParseError(detail=type(e).__name__) from e
 
                 if self.parser.state == StreamState.EXPECT_START:
                     current_output_index += 1
@@ -768,9 +846,16 @@ def create_api_server(
                     # por chunks/ventanas solapadas para evitar ejecutar Qualia por token.
                     output_token_text = encoding.decode_utf8([next_tok])
                     self.output_text += output_token_text
-                    print(output_token_text, end="", flush=True)
-                except RuntimeError:
-                    pass
+                    LOGGER.debug(
+                        "responses_api.output_token_decoded",
+                        token_chars=len(output_token_text),
+                    )
+                except RuntimeError as exc:
+                    LOGGER.error(
+                        "responses_api.output_token_decode_failed",
+                        error_type=type(exc).__name__,
+                    )
+                    raise HarmonyParseError(detail=type(exc).__name__) from exc
 
                 if next_tok in encoding.stop_tokens_for_assistant_actions():
                     if len(self.parser.messages) > 0:
@@ -860,7 +945,7 @@ def create_api_server(
                                 Conversation.from_messages(result), Role.ASSISTANT
                             )
                             
-                            print(encoding.decode_utf8(new_tokens))
+                            LOGGER.debug("responses_api.browser_tool_tokens_rendered", token_count=len(new_tokens))
                             self.output_tokens.append(next_tok)
                             self.tokens.append(encoding.encode('<|end|>', allowed_special="all")[0])
 
@@ -934,7 +1019,12 @@ def create_api_server(
 
     @app.post("/v1/responses", response_model=ResponseObject)
     async def generate(body: ResponsesRequest, request: Request):
-        print("request received")
+        LOGGER.info(
+            "responses_api.request_received",
+            model=body.model,
+            stream=body.stream,
+            tool_types=[getattr(tool, "type", None) for tool in (body.tools or [])],
+        )
 
         use_browser_tool = any(
             getattr(tool, "type", None) == "browser_search"
@@ -1127,7 +1217,7 @@ def create_api_server(
         initial_tokens = encoding.render_conversation_for_completion(
             conversation, Role.ASSISTANT
         )
-        print(encoding.decode_utf8(initial_tokens))
+        LOGGER.debug("responses_api.initial_tokens_rendered", token_count=len(initial_tokens))
 
         def store_callback(rid: str, req: ResponsesRequest, resp: ResponseObject):
             responses_store[rid] = (req, resp)
