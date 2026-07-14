@@ -1,6 +1,6 @@
 [project]
-name = "gpt-oss"
-description = "A collection of reference inference implementations for gpt-oss by OpenAI"
+name = "gpt-oss-agi"
+description = "Experimental unofficial community fork of gpt-oss with AGIX/Qualia governance integrations"
 
 dependencies = [
   "openai-harmony",
@@ -22,6 +22,21 @@ dependencies = [
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 version = "0.0.1"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/inteligencIA-AGI/gpt-oss-AGI"
+Repository = "https://github.com/inteligencIA-AGI/gpt-oss-AGI"
+Documentation = "https://github.com/inteligencIA-AGI/gpt-oss-AGI#readme"
+Issues = "https://github.com/inteligencIA-AGI/gpt-oss-AGI/issues"
+"OpenAI gpt-oss upstream" = "https://github.com/openai/gpt-oss"
 
 [project.optional-dependencies]
 triton = ["triton", "safetensors>=0.5.3", "torch>=2.7.0"]

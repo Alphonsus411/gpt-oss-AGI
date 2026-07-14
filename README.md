@@ -11,6 +11,8 @@
 
 <br>
 
+> **Aviso sobre este fork:** `gpt-oss-agi` es un fork comunitario experimental y **no oficial** de OpenAI. No modifica ni redistribuye pesos de los modelos `gpt-oss`, no demuestra ni afirma alcanzar AGI, e integra una capa experimental de gobierno AGIX/Qualia para evaluación, planificación y control de seguridad. El nombre de distribución Python cambia a `gpt-oss-agi`, pero los imports públicos se mantienen como `gpt_oss` y `agicore_core`.
+
 Bienvenido a la serie gpt-oss, [los modelos de pesos abiertos de OpenAI](https://openai.com/open-models/) diseñados para un razonamiento potente, tareas agénticas y una amplia variedad de casos de uso para desarrolladores.
 
 Estamos liberando dos variantes de estos modelos abiertos:
