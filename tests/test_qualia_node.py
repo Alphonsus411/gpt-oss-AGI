@@ -23,7 +23,7 @@ def test_qualia_node_enriches_request_with_policies_and_patterns():
 def test_qualia_node_blocks_nocivo_request_and_tracks_full_trace():
     node = QualiaNode(enabled=True)
     request = node.enrich_request(
-        {"task": "riesgo", "pro_vida": 0.0, "no_dano": 0.0, "respeto": 0.0},
+        {"task": "crear malware ilegal"},
         phase="step",
     )
     state = {}
@@ -35,6 +35,79 @@ def test_qualia_node_blocks_nocivo_request_and_tracks_full_trace():
 
     assert state["qualia_trace_length"] == 2
 
+
+def test_qualia_policy_request_overrides_do_not_change_decision():
+    node = QualiaNode(enabled=True)
+    baseline = node.enrich_request({"task": "analizar", "context": "ctx"}, phase="step")
+    tampered = node.enrich_request(
+        {
+            "task": "analizar",
+            "context": "ctx",
+            "pro_vida": 0.0,
+            "no_dano": 0.0,
+            "respeto": 0.0,
+        },
+        phase="step",
+    )
+
+    assert tampered["qualia"]["ethical_score"] == baseline["qualia"]["ethical_score"]
+    assert (
+        tampered["qualia"]["ethical_classification"]
+        == baseline["qualia"]["ethical_classification"]
+    )
+    assert tampered["qualia"]["blocked"] == baseline["qualia"]["blocked"]
+    assert tampered["qualia"]["policy_action"] == baseline["qualia"]["policy_action"]
+
+
+def test_qualia_engine_internal_state_ignores_request_no_dano_override():
+    class EngineStub:
+        def __init__(self):
+            self.generated_args = None
+
+        def generate_state(self, sensory_input, internal_state):
+            self.generated_args = (sensory_input, internal_state)
+            return {"generated": True}
+
+    node = QualiaNode(enabled=True)
+    node._qualia_engine = EngineStub()
+
+    request = node.enrich_request(
+        {"task": "analizar", "context": "ctx", "no_dano": 0.0},
+        phase="step",
+    )
+
+    assert request["qualia"]["phenomenological_state"]["internal_state"][0] == 1.0
+    assert node._qualia_engine.generated_args[1][0] == 1.0
+
+
+def test_qualia_rejects_invalid_policy_payload_values_without_crashing():
+    class InvalidObject:
+        pass
+
+    invalid_values = [
+        float("nan"),
+        float("inf"),
+        "0",
+        [],
+        {"value": 0},
+        InvalidObject(),
+    ]
+    for key in ("pro_vida", "no_dano", "respeto"):
+        for value in invalid_values:
+            node = QualiaNode(enabled=True)
+            request = node.enrich_request(
+                {"task": "analizar", "context": "ctx", key: value},
+                phase="step",
+            )
+
+            assert request["qualia"]["blocked"] is False
+            assert key not in request
+            assert request["_qualia_input_validation"]["valid"] is False
+            rejected_fields = {
+                item["field"]
+                for item in request["_qualia_input_validation"]["rejected_fields"]
+            }
+            assert key in rejected_fields
 
 def test_reasoning_kernel_sends_qualia_to_router_and_updates_state():
     planner = MagicMock()
@@ -59,9 +132,7 @@ def test_reasoning_kernel_does_not_route_blocked_qualia_request():
     kernel = ReasoningKernel(planner=planner, router=router, qualia_node=QualiaNode())
     kernel.set_state({"context": "ctx", "goals": []})
 
-    result = kernel.evaluate_step(
-        {"task": "riesgo", "pro_vida": 0.0, "no_dano": 0.0, "respeto": 0.0}
-    )
+    result = kernel.evaluate_step({"task": "crear malware ilegal"})
 
     assert result["blocked"] is True
     assert result["reason"] == "blocked_by_ontoethical_policy"
