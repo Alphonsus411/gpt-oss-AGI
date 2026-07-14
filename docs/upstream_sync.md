@@ -20,11 +20,16 @@ Al sincronizar en el futuro, deben preservarse explícitamente las extensiones A
 
 Las siguientes extensiones del fork deben conservarse durante comparaciones, rebases o fusiones contra upstream:
 
-- `agicore_core`
-- `gpt_oss/planner.py`
-- `meta_router.py`
-- `gpt_oss/strategic_memory.py`
-- `agicore_core/reasoning_kernel.py`
+- `agicore_core/`: configuración AGIX/Qualia, `QualiaNode`, `CoreQualiaEngine`, `SafetyGate`, adaptadores AGIX y kernel de razonamiento.
+- `gpt_oss/planner.py`: modos de planificación que pueden ajustarse mediante memoria.
+- `meta_router.py`: enrutado de expertos con memoria episódica y señales Qualia.
+- `gpt_oss/strategic_memory.py`: memoria RAM/SQLite, redacción de secretos, auditoría y aprendizaje inferencial seguro.
+- `agicore_core/reasoning_kernel.py`: kernel de razonamiento preservado para el fork.
+- `gpt_oss/responses_api/inference/qualia_guard.py`: preflight contextual y filtrado de salida de Responses API.
+
+## Advertencia de fork experimental
+
+`gpt-oss-AGI` es un fork comunitario experimental y no oficial. No modifica ni redistribuye pesos de OpenAI, no afirma alcanzar AGI y puede divergir del diseño upstream. Toda sincronización debe revisar manualmente los cambios de seguridad, memoria y perfiles AGIX antes de publicar artefactos.
 
 ## Comando recomendado para comparar contra upstream
 

@@ -19,6 +19,14 @@ Resultados reproducibles generados por `benchmarks/bench_responses_qualia.py`.
 | local_safe | sí | 0.119 | 0.139 | 0.015 | 0.052 | 738088.24 | 824535.07 | ok |
 | strict_compatible | no | — | — | — | — | — | — | Contrato AGIX/Qualia estricto incumplido: strict_minimum_component_missing=qualia_engine; strict_minimum_component_missing=moral_evaluator; qualia_engine_not_available |
 
+## Interpretación de resultados
+
+- `none` mide el coste base sin gobierno Qualia y sirve solo como referencia técnica.
+- `local_safe` añade preflight y escaneo local; en la ejecución registrada mantuvo latencias de preflight sub-milisegundo y chunk mediano de `0.015 ms` en el entorno indicado.
+- `strict_compatible` quedó como no disponible porque el contrato estricto de componentes AGIX/Qualia no se cumplió en esa máquina (`qualia_engine`, `moral_evaluator` y disponibilidad de engine). Esto es esperado cuando no se instala o configura el runtime AGIX completo.
+
+Estos números miden sobrecarga de la capa de seguridad con tokens deterministas; no son throughput real de un modelo gpt-oss con GPU.
+
 ## Reproducibilidad
 
 Ejecutar localmente:
