@@ -174,13 +174,25 @@ class InMemoryMemoryBackend(MemoryBackend):
         if self._ttl is None:
             return
         cutoff = datetime.now(timezone.utc) - self._ttl
-        self._storage = {key: item for key, item in self._storage.items() if item[0] >= cutoff}
+        self._storage = {
+            key: item for key, item in self._storage.items() if self._as_utc(item[0]) >= cutoff
+        }
         for name, episodes in self._collections.items():
-            self._collections[name] = [episode for episode in episodes if episode.timestamp >= cutoff]
+            self._collections[name] = [
+                episode for episode in episodes if self._as_utc(episode.timestamp) >= cutoff
+            ]
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        """Return an aware UTC datetime, treating legacy naive values as UTC."""
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     @staticmethod
     def _redact_episode(episode: Episode) -> Episode:
         clone = copy.deepcopy(episode)
+        clone.timestamp = InMemoryMemoryBackend._as_utc(clone.timestamp)
         clone.input = SecretRedactor.redact(clone.input)
         clone.action = SecretRedactor.redact(clone.action)
         clone.outcome = SecretRedactor.redact(clone.outcome)

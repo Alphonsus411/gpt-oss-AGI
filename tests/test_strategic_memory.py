@@ -212,6 +212,18 @@ def test_ttl_expiration_removes_old_episodes_and_keys():
     assert memoria.query({"action": "expired"}) == []
 
 
+def test_ttl_accepts_legacy_naive_episode_timestamps():
+    now = datetime.now(timezone.utc)
+    memoria = StrategicMemory(backend=InMemoryMemoryBackend(ttl=timedelta(seconds=30)))
+    memoria.add_episode(Episode((now - timedelta(seconds=60)).replace(tzinfo=None), "old", "expired", "no"))
+    memoria.add_episode(Episode(now.replace(tzinfo=None), "new", "retained", "yes"))
+
+    episodes = memoria.query({})
+
+    assert [episode.action for episode in episodes] == ["retained"]
+    assert episodes[0].timestamp.tzinfo is timezone.utc
+
+
 def test_transaction_rollback_discards_changes():
     memoria = StrategicMemory(backend=InMemoryMemoryBackend())
 
