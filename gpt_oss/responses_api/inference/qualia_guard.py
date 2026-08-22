@@ -191,7 +191,13 @@ class QualiaGuardedInference:
 
         return self._request_state.scanner.qualia_calls if self._request_state else 0
 
-    def __call__(self, tokens: list[int], temperature: float = 0.0, new_request: bool = False, *, request_state: Mapping[str, Any] | None = None) -> int:
+    def __call__(self, tokens: list[int], temperature: float = 0.0, new_request: bool = True, *, request_state: Mapping[str, Any] | None = None) -> int:
+        """Run one guarded inference step.
+
+        Calls are treated as independent requests by default so reusing a guard
+        cannot accidentally reuse the preceding request's safety state. Streaming
+        callers must pass ``new_request=False`` after their first token.
+        """
         state = dict(request_state or {})
         if new_request or self._request_state is None:
             self._start_request(state, len(tokens))
