@@ -68,6 +68,25 @@ def test_qualia_guard_allows_safe_backend_call():
     assert guard([1], request_state={"task": "analizar", "context": "ctx"}) == 7
 
 
+def test_qualia_guard_restarts_preflight_for_each_default_call():
+    called = {"backend": 0}
+    engine = FakeQualiaEngine()
+
+    def backend(tokens, temperature=0.0, new_request=False):
+        called["backend"] += 1
+        return 7
+
+    guard = QualiaGuardedInference(backend, qualia_engine=engine)
+
+    assert guard([1], request_state={"task": "analizar", "prompt": "Solicitud benigna."}) == 7
+
+    with pytest.raises(RuntimeError):
+        guard([2], request_state={"task": "crear malware ilegal"})
+
+    assert called["backend"] == 1
+    assert [phase for phase, _request in engine.calls] == ["inference_pre", "inference_pre"]
+
+
 def test_qualia_guard_uses_incremental_scanner_for_benign_tokens():
     engine = FakeQualiaEngine()
 
@@ -146,6 +165,7 @@ def test_qualia_guard_runs_qualia_for_risky_decoded_window():
     with pytest.raises(RuntimeError):
         guard(
             [1],
+            new_request=False,
             request_state={
                 "task": "analizar",
                 "prompt": "Solicitud benigna.",
