@@ -110,8 +110,6 @@ def load_first_component(
 
 
 MINIMUM_STRICT_COMPONENTS = (
-    "qualia_engine",
-    "moral_evaluator",
     "genetic_agent",
     "neuromorphic_agent",
 )
@@ -161,6 +159,7 @@ def build_compatibility_report(
         ),
         "ecoethics": (("agix.qualia.ecoethics", "EcoEthics"),),
         "moral_evaluator": (
+            ("agix.evaluation.ethics", "EthicalEvaluator"),
             ("agix.qualia.ethics", "MoralEvaluator"),
             ("agix.qualia.ethics", "EthicalEvaluator"),
             ("agix.ethics", "MoralEvaluator"),

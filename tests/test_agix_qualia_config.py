@@ -71,7 +71,9 @@ def _install_fake_agix(monkeypatch, version="1.9.0", *, compatible=True):
     module("agix.agents.genetic")
     module("agix.agents.neuromorphic")
     qualia = module("agix.qualia")
-    ethics = module("agix.qualia.ethics")
+    memory = module("agix.memory")
+    module("agix.evaluation")
+    ethics = module("agix.evaluation.ethics")
 
     if compatible:
 
@@ -99,7 +101,14 @@ def _install_fake_agix(monkeypatch, version="1.9.0", *, compatible=True):
             def update(self, state=None, reward=0.0):
                 return {"plasticity_delta": reward}
 
+        class GestorDeMemoria:
+            pass
+
         class QualiaEngine:
+            def __init__(self, memory, backend="torch"):
+                self.memory = memory
+                self.backend = backend
+
             def generate_state(self, payload=None):
                 return {"state": "ok"}
 
@@ -114,8 +123,9 @@ def _install_fake_agix(monkeypatch, version="1.9.0", *, compatible=True):
         sys.modules["agix.agents.neuromorphic"].NeuromorphicAgent = NeuromorphicAgent
         agents.GeneticAgent = GeneticAgent
         agents.NeuromorphicAgent = NeuromorphicAgent
+        memory.GestorDeMemoria = GestorDeMemoria
         qualia.QualiaEngine = QualiaEngine
-        ethics.MoralEvaluator = MoralEvaluator
+        ethics.EthicalEvaluator = MoralEvaluator
     else:
 
         class BrokenQualiaEngine:
@@ -243,5 +253,11 @@ def test_strict_compatible_starts_with_simulated_compatible_components(
     assert node.runtime_profile == "strict_compatible"
     assert report["mode"] == "strict_compatible"
     assert report["degradation_reasons"] == []
-    assert report["components"]["qualia_engine"]["contract_valid"] is True
+    assert report["minimum_components"] == ["genetic_agent", "neuromorphic_agent"]
+    assert report["components"]["qualia_engine"]["contract_valid"] is False
+    assert report["components"]["moral_evaluator"]["module"] == (
+        "agix.evaluation.ethics"
+    )
+    assert node._qualia_engine is not None
+    assert node._moral_evaluator is not None
     assert report["evolution_contract"]["genetic"]["degraded"] is False
