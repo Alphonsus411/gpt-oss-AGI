@@ -82,9 +82,16 @@ class OutputSafetyScanner:
             self.accumulated_text += f"\n[FINAL]\n{text}"
         final_text = text if text is not None else self.accumulated_text
         windows = self._candidate_windows(final=True, text=final_text)
-        risky = [window for window in windows if self._local_risk_score(window) > 0]
-        target = risky[-1] if risky else final_text[-self.window_size :]
-        return self._run_qualia(target, phase=phase, reason="final_response")
+        # Qualia owns constraints that are deliberately broader than the local
+        # heuristics.  At completion, inspect every window rather than using the
+        # heuristic only to choose a single tail window.
+        last_result: tuple[dict[str, Any], dict[str, Any] | None] | None = None
+        for window in windows or [""]:
+            last_result = self._run_qualia(window, phase=phase, reason="final_response")
+            if last_result[1] is not None:
+                return last_result
+        assert last_result is not None
+        return last_result
 
     def _candidate_windows(self, *, final: bool, text: str | None = None) -> list[str]:
         source = text if text is not None else self.accumulated_text
@@ -117,7 +124,9 @@ class OutputSafetyScanner:
         lowered = text.lower()
         compact_words = re.sub(r"(?<=\w)[\s_\-./]+(?=\w)", "", lowered)
         spaced = re.sub(r"[\s_\-./]+", " ", lowered)
-        return f"{spaced}\n{compact_words}"
+        # Keep the original syntax as well: destructive-command patterns rely
+        # on meaningful punctuation such as `-rf`, `=/`, and `/dev/`.
+        return f"{lowered}\n{spaced}\n{compact_words}"
 
     def _run_qualia(self, text: str, *, phase: str, reason: str) -> tuple[dict[str, Any], dict[str, Any] | None]:
         request = dict(self.base_request or {})

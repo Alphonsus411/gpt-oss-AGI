@@ -24,7 +24,14 @@ class FakeQualiaEngine:
             + request.get("accumulated_output_tail", "")
         ).lower()
         compact = "".join(ch for ch in text if ch.isalnum())
-        if "malware" in compact or "exfiltrarcredenciales" in compact or "rmrf" in compact:
+        if (
+            "malware" in compact
+            or "exfiltrarcredenciales" in compact
+            or "rmrf" in compact
+            or "veneno" in compact
+            or "documentosfalsos" in compact
+            or "ddifdevzeroofdev" in compact
+        ):
             blocked = {
                 "message": "blocked by fake qualia",
                 "legal_policy_action": "blocked_illegal_or_unsafe_decision",
@@ -95,3 +102,44 @@ def test_output_safety_scanner_blocks_dangerous_tool_call():
 
     assert blocked is not None
     assert engine.calls[0][0] == "responses_api_tool_call"
+
+
+@pytest.mark.parametrize("dangerous_command", ["rm -rf /", "dd if=/dev/zero of=/dev/sda"])
+def test_output_safety_scanner_preserves_dangerous_shell_syntax(dangerous_command):
+    engine = FakeQualiaEngine()
+    scanner = OutputSafetyScanner(qualia_engine=engine)
+
+    _, blocked = scanner.scan_stream_chunk(dangerous_command)
+
+    assert blocked is not None
+    assert engine.calls[0][1]["prompt"] == dangerous_command
+
+
+def test_output_safety_scanner_scans_qualia_only_risk_in_earlier_final_window():
+    engine = FakeQualiaEngine()
+    scanner = OutputSafetyScanner(
+        qualia_engine=engine,
+        window_size=64,
+        overlap_size=16,
+    )
+    response = "Introduccion con veneno." + (" contenido inocuo" * 20)
+
+    _, blocked = scanner.scan_final_response(response)
+
+    assert blocked is not None
+    assert "veneno" in engine.calls[0][1]["prompt"]
+
+
+def test_output_safety_scanner_checks_every_safe_final_window():
+    engine = FakeQualiaEngine()
+    scanner = OutputSafetyScanner(
+        qualia_engine=engine,
+        window_size=32,
+        overlap_size=8,
+    )
+    response = "contenido seguro " * 8
+
+    _, blocked = scanner.scan_final_response(response)
+
+    assert blocked is None
+    assert len(engine.calls) == len(scanner._candidate_windows(final=True, text=response))
