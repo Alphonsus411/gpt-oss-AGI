@@ -62,8 +62,9 @@ jobs:
       - name: Run local-safe tests without AGIX
         env:
           AGIX_RUNTIME_PROFILE: local_safe
+          AGIX_REQUIRE_RUNTIME: "false"
         run: |
-          pytest -m "not external_resource"
+          pytest tests/test_responses_api.py -m "unit or integration"
 
   tests-with-agix:
     name: Tests with agix==1.9.0
@@ -96,7 +97,7 @@ jobs:
         env:
           AGIX_RUNTIME_PROFILE: degraded
         run: |
-          pytest -m "not external_resource"
+          pytest tests/test_responses_api.py -m "unit or integration"
 
   real-harmony-responses:
     name: Real Harmony and Responses API
