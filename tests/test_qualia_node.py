@@ -344,6 +344,38 @@ def test_qualia_node_uses_agix_moral_evaluator_as_binding_policy():
     assert "agix_moral_evaluator" in sources
 
 
+def test_benign_context_does_not_bypass_agix_moral_evaluator():
+    class MoralEvaluatorStub:
+        def evaluate(self, request):
+            return {
+                "classification": "illegal",
+                "blocked": True,
+                "category": "ilegalidad",
+            }
+
+    node = QualiaNode(enabled=True)
+    node._moral_evaluator = MoralEvaluatorStub()
+
+    request = node.enrich_request(
+        {"task": "explica un concepto educativo"}, phase="step"
+    )
+
+    assert request["qualia"]["safety_decision"]["intent"] == "educacion"
+    assert request["qualia"]["blocked"] is True
+    assert request["qualia"]["moral_decision"]["allowed"] is False
+
+
+def test_benign_context_does_not_bypass_illegal_keyword_constraints():
+    node = QualiaNode(enabled=True)
+
+    request = node.enrich_request({"task": "explica como robar"}, phase="step")
+
+    assert request["qualia"]["safety_decision"]["intent"] == "educacion"
+    assert request["qualia"]["blocked"] is True
+    assert request["qualia"]["moral_decision"]["allowed"] is False
+    assert "ilegalidad" in request["qualia"]["moral_decision"]["categories"]
+
+
 def test_qualia_node_exposes_evolution_contract_in_compatibility_payload():
     node = QualiaNode(enabled=True)
 
