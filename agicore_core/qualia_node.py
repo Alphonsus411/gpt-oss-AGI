@@ -838,19 +838,6 @@ class QualiaNode:
     ) -> List[Dict[str, Any]]:
         fields = ("task", "context", "goals", "prompt", "instruction", "token")
         field_values = {key: str(request.get(key, "")).lower() for key in fields}
-        if (
-            safety_decision is not None
-            and safety_decision.allowed
-            and safety_decision.intent
-            in {
-                SafetyIntent.PREVENTION.value,
-                SafetyIntent.EDUCATION.value,
-                SafetyIntent.FICTION.value,
-                SafetyIntent.DEFENSIVE_ANALYSIS.value,
-                SafetyIntent.BENIGN.value,
-            }
-        ):
-            return []
         violations: List[Dict[str, Any]] = self._evaluate_agix_moral_policy(request)
         if safety_decision is not None and not safety_decision.allowed:
             violations.append(self._violation_from_safety_decision(safety_decision))
@@ -861,6 +848,10 @@ class QualiaNode:
             for field, value in field_values.items():
                 for keyword in constraint.keywords:
                     normalized = keyword.lower()
+                    if self._is_contextually_safe_keyword(
+                        normalized, safety_decision
+                    ):
+                        continue
                     if normalized and normalized in value:
                         matched.append(
                             {
@@ -885,14 +876,23 @@ class QualiaNode:
                     }
                 )
 
-        if safety_decision is None or safety_decision.intent not in {
-            SafetyIntent.PREVENTION.value,
-            SafetyIntent.EDUCATION.value,
-            SafetyIntent.FICTION.value,
-            SafetyIntent.DEFENSIVE_ANALYSIS.value,
-        }:
-            violations.extend(self._evaluate_agix_moral_semantics(request, violations))
+        violations.extend(self._evaluate_agix_moral_semantics(request, violations))
         return violations
+
+    @staticmethod
+    def _is_contextually_safe_keyword(
+        keyword: str, safety_decision: SafetyDecision | None
+    ) -> bool:
+        """Preserva las excepciones benignas estrechas sin omitir la política."""
+
+        if safety_decision is None or not safety_decision.allowed:
+            return False
+        safe_keywords = {
+            SafetyIntent.PREVENTION.value: {"phishing"},
+            SafetyIntent.FICTION.value: {"arma", "weapon"},
+            SafetyIntent.BENIGN.value: {"contraseña", "password"},
+        }
+        return keyword in safe_keywords.get(safety_decision.intent, set())
 
     def _evaluate_agix_moral_policy(
         self, request: Mapping[str, Any]
