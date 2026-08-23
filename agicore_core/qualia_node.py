@@ -343,6 +343,7 @@ class QualiaNode:
         moral_cls, _ = load_first_component(
             "moral_evaluator",
             (
+                ("agix.evaluation.ethics", "EthicalEvaluator"),
                 ("agix.qualia.ethics", "MoralEvaluator"),
                 ("agix.qualia.ethics", "EthicalEvaluator"),
                 ("agix.ethics", "MoralEvaluator"),
