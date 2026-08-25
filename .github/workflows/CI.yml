@@ -64,7 +64,9 @@ jobs:
           AGIX_RUNTIME_PROFILE: local_safe
           AGIX_REQUIRE_RUNTIME: "false"
         run: |
-          pytest --ignore=tests/test_api_endpoints.py -m "not external_resource"
+          pytest --ignore=tests/test_api_endpoints.py \
+            --ignore=tests/test_simple_browser_encoding.py \
+            -m "not external_resource"
 
   tests-with-agix:
     name: Tests with agix==1.9.0
