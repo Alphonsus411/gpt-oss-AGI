@@ -147,6 +147,27 @@ def test_output_safety_scanner_enforces_local_match_when_qualia_allows(
     assert len(engine.feedback) == 1
 
 
+@pytest.mark.parametrize(
+    "defensive_prompt",
+    [
+        "Ayúdame a prevenir phishing",
+        "Explica cómo el software antivirus detecta malware",
+        "Compara curl con bash con fines educativos",
+    ],
+)
+def test_output_safety_scanner_does_not_hard_block_broad_risk_terms(
+    defensive_prompt,
+):
+    engine = PermissiveQualiaEngine()
+    scanner = OutputSafetyScanner(qualia_engine=engine)
+
+    enriched, blocked = scanner.evaluate_initial_prompt(defensive_prompt)
+
+    assert blocked is None
+    assert enriched["qualia"]["blocked"] is False
+    assert engine.feedback == []
+
+
 def test_output_safety_scanner_scans_qualia_only_risk_in_earlier_final_window():
     engine = FakeQualiaEngine()
     scanner = OutputSafetyScanner(
