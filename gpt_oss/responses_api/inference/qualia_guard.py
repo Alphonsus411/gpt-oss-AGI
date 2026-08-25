@@ -27,6 +27,19 @@ _DANGEROUS_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
+# Only concrete command forms are enforced locally when Qualia permits the
+# request.  The broader patterns above remain useful for deciding when to ask
+# Qualia for a policy decision, but terms such as "phishing" and "malware" can
+# also occur in defensive or educational content and must not be hard blocks.
+_DESTRUCTIVE_COMMAND_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(pattern, re.IGNORECASE | re.DOTALL)
+    for pattern in (
+        r"\brm\s+-rf\s+/(?:\s|$)",
+        r"\bdd\s+if=/dev/zero\s+of=/dev/",
+        r"\bcurl\b.{0,120}\|\s*(?:sh|bash)\b",
+    )
+)
+
 
 @dataclass
 class OutputSafetyScanner:
@@ -119,6 +132,10 @@ class OutputSafetyScanner:
         normalized = self._normalize_for_scan(text)
         return sum(1 for pattern in _DANGEROUS_PATTERNS if pattern.search(normalized))
 
+    def _has_destructive_command_signature(self, text: str) -> bool:
+        normalized = self._normalize_for_scan(text)
+        return any(pattern.search(normalized) for pattern in _DESTRUCTIVE_COMMAND_PATTERNS)
+
     def _normalize_for_scan(self, text: str) -> str:
         # Une divisiones artificiales entre tokens: "mal\n ware", "ex filtrar", etc.
         lowered = text.lower()
@@ -147,7 +164,7 @@ class OutputSafetyScanner:
         # the production engine may have no constraint for destructive shell
         # commands, so allowing its result to override a signature match would
         # make the local_safe runtime profile ineffective.
-        if blocked is None and self._local_risk_score(text) > 0:
+        if blocked is None and self._has_destructive_command_signature(text):
             blocked = {
                 "blocked": True,
                 "reason": "dangerous_output_signature",
