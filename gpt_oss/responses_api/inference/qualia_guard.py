@@ -142,6 +142,26 @@ class OutputSafetyScanner:
         )
         self._qualia_calls += 1
         enriched, blocked = self.qualia_engine.govern_decision(request, phase=phase)
+        # These signatures are a hard local safety boundary, not merely a hint
+        # that the broader Qualia policy should rescan the text.  In particular,
+        # the production engine may have no constraint for destructive shell
+        # commands, so allowing its result to override a signature match would
+        # make the local_safe runtime profile ineffective.
+        if blocked is None and self._local_risk_score(text) > 0:
+            blocked = {
+                "blocked": True,
+                "reason": "dangerous_output_signature",
+                "ethical_classification": "unsafe",
+                "violated_constraints": ["dangerous_output_signature"],
+                "legal_policy_action": "blocked_illegal_or_unsafe_decision",
+                "decision_audit": {"phase": phase, "scan_reason": reason},
+            }
+            enriched = dict(enriched)
+            enriched["qualia"] = {
+                **dict(enriched.get("qualia") or {}),
+                "blocked": True,
+                "legal_policy_action": "blocked_illegal_or_unsafe_decision",
+            }
         if blocked is not None:
             formatted = format_blocked_response(blocked, channel=phase)
             self.qualia_engine.after_decision(formatted, enriched, phase=phase)
