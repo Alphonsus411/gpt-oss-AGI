@@ -8,8 +8,8 @@ El workflow `CI` se ejecuta en `pull_request`, en cualquier `push` de rama y man
 
 Jobs principales:
 
-1. **Tests without AGIX**: instala el proyecto con dependencias de test, desinstala `agix` y ejecuta `tests/test_responses_api.py` con `AGIX_RUNTIME_PROFILE=local_safe` y desactiva el requisito estricto del runtime. Esto valida que el modo seguro/fallback funciona sin el runtime AGIX instalado.
-2. **Tests with `agix==1.9.0`**: instala explícitamente `agix==1.9.0`, comprueba la versión instalada y ejecuta `tests/test_responses_api.py` con el perfil degradado.
+1. **Tests without AGIX**: instala el proyecto con dependencias de test, desinstala `agix` y ejecuta toda la suite que no requiere recursos externos con `AGIX_RUNTIME_PROFILE=local_safe`, salvo los casos del endpoint heredado en `tests/test_api_endpoints.py`. También desactiva el requisito estricto del runtime para validar que el modo seguro/fallback funciona sin AGIX instalado.
+2. **Tests with `agix==1.9.0`**: instala explícitamente `agix==1.9.0`, comprueba la versión instalada y ejecuta toda la suite que no requiere recursos externos con el perfil degradado, salvo los casos del endpoint heredado en `tests/test_api_endpoints.py`.
 3. **Real Harmony and Responses API**: ejecuta `tests/test_responses_api.py` usando el paquete real `openai-harmony` y el servidor Responses API del repositorio.
 4. **Ruff check**: ejecuta `ruff check .`.
 5. **Type checking with pyright**: instala el paquete en modo editable y ejecuta `pyright`.
