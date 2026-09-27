@@ -6,7 +6,7 @@ from openai_harmony import (
     Author,
     Role,
     Message,
-    SystemError,
+    TextContent,
 )
 
 
@@ -95,12 +95,13 @@ class Tool(ABC):
         """
         Return an error message emitted by this tool.
 
-        The returned message's content is a ``SystemError`` containing the
-        provided text, indicating to the assistant that an error occurred.
+        Harmony 0.0.8 does not expose the newer ``SystemError`` content type.
+        Tool errors are therefore represented as ordinary text from the tool,
+        which remains renderable by every supported Harmony version.
         """
         return Message(
             id=id if id else uuid4(),
             author=Author(role=Role.TOOL, name=self.name),
-            content=SystemError(message=error_message),
+            content=[TextContent(text=error_message)],
             channel=channel,
         ).with_recipient("assistant")
