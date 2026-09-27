@@ -65,7 +65,6 @@ jobs:
           AGIX_REQUIRE_RUNTIME: "false"
         run: |
           pytest --ignore=tests/test_api_endpoints.py \
-            --ignore=tests/test_simple_browser_encoding.py \
             -m "not external_resource"
 
   tests-with-agix:
@@ -100,7 +99,6 @@ jobs:
           AGIX_RUNTIME_PROFILE: degraded
         run: |
           pytest --ignore=tests/test_api_endpoints.py \
-            --ignore=tests/test_simple_browser_encoding.py \
             -m "not external_resource" \
             --deselect=tests/test_agix_qualia_config.py::test_local_safe_starts_without_agix_and_keeps_advanced_adapters_disabled \
             --deselect=tests/test_agix_qualia_config.py::test_strict_compatible_fails_clearly_without_agix_or_with_wrong_version \
